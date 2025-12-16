@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenEvent AI Backend (FastAPI)
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/openevent
+Environment="PATH=/opt/openevent/venv/bin"
+Environment="PYTHONDONTWRITEBYTECODE=1"
+EnvironmentFile=/opt/openevent/.env
+ExecStart=/opt/openevent/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
