@@ -2,6 +2,30 @@
 
 Deploy the OpenEvent AI backend to Hostinger VPS, then connect from Lovable frontend.
 
+---
+
+## Quick Reference
+
+| What you need | Where to find it |
+|---------------|------------------|
+| **VPS IP Address** | `72.60.135.183` |
+| **Backend Port** | `8000` |
+| **Lovable env var** | `VITE_BACKEND_BASE=http://72.60.135.183:8000` |
+| **API Endpoints** | See table below or [API_TESTS.md](./API_TESTS.md) |
+| **Setup script** | `deploy/setup-vps.sh` |
+| **Service config** | `deploy/openevent.service` |
+
+### Files in this folder:
+```
+deploy/
+├── README.md           ← You are here (setup guide)
+├── API_TESTS.md        ← All endpoints with curl examples
+├── setup-vps.sh        ← Run this on VPS to install everything
+└── openevent.service   ← systemd service configuration
+```
+
+---
+
 ## Your VPS Info
 - **Server:** srv1153474.hstgr.cloud
 - **IP:** 72.60.135.183
@@ -111,7 +135,7 @@ That's it! The frontend will now call your Hostinger backend.
 
 ## API Endpoints (Already Implemented)
 
-These endpoints are ready to use:
+These endpoints are ready to use. **For detailed curl examples and test results, see [API_TESTS.md](./API_TESTS.md)**.
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
