@@ -1,3 +1,8 @@
+##
+# Optional test/development extras.
+# Install only if you plan to run pytest or local regression tooling.
+##
+
 pytest
 pytest-cov
 freezegun

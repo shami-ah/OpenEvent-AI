@@ -2,6 +2,8 @@
 
 OpenEvent-AI is a sophisticated, full-stack system designed to automate the end-to-end venue booking flow for "The Atelier". It combines the flexibility of Large Language Models (LLMs) with the reliability of deterministic state machines to handle inquiries, negotiate offers, and confirm bookings with "Human-In-The-Loop" (HIL) oversight.
 
+> **Branch focus:** `integration/hostinger-backend` ships only the backend API that is deployed to Hostinger. Frontend apps live in the repo but are not part of this deployment target.
+
 ## 🚀 Overview
 
 The system ingests client inquiries (currently simulated via chat), maintains a deterministic event record, and coordinates every step of the booking process. Unlike simple chatbots, OpenEvent-AI is built on a **workflow engine** that tracks the lifecycle of an event from a "Lead" to a "Confirmed" booking.
@@ -121,34 +123,39 @@ p implementations (intake, offer, etc.)
 - **OpenAI API Key** (Set as `OPENAI_API_KEY` env var)
 
 ### 1. Setup Backend
-```bash
-# From project root - create virtual environment (optional but recommended)
-python -m venv venv
-source venv/bin/activate
 
-# Install dependencies
-pip install -r requirements-dev.txt
+1. **Create a virtual environment (optional, but recommended)**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate
+   ```
+2. **Install the runtime dependencies (works on any shell/IDE)**
+   ```bash
+   pip install fastapi uvicorn pydantic python-dotenv openai openai-agents openai-chatkit
+   ```
+   (or simply `pip install -r requirements-dev` to match the Hostinger runtime snapshot)
+3. **(Optional) Install test tooling**
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+   `requirements-dev.txt` only contains pytest/freezegun/etc. for regression suites; skip it if you just need the API running.
+4. **Start the backend**
+   ```bash
+   # macOS shortcut: also sets PYTHONPATH before launching uvicorn
+   source scripts/oe_env.sh && uvicorn backend.main:app --reload --port 8000
 
-# Option A: Use the dev environment script (recommended for macOS)
-# This sets PYTHONPATH and loads OPENAI_API_KEY from macOS Keychain
-source scripts/oe_env.sh
-uvicorn backend.main:app --reload --port 8000
+   # or do it manually on any platform
+   export PYTHONPATH=$(pwd)
+   uvicorn backend.main:app --reload --port 8000
+   ```
 
-# Option B: Manual setup
-export PYTHONPATH=$(pwd)
-export OPENAI_API_KEY=your_api_key_here
-uvicorn backend.main:app --reload --port 8000
-```
+> ℹ️ Replace the placeholder `OPENAI_API_KEY=sk-your-openai-key` in `.env` with
+> your real key (and never commit the real secret). The backend loads this file
+> automatically, so once it’s filled in you can run `uvicorn` without extra env
+> exports.
 
-**Storing API Key in macOS Keychain (optional):**
-```bash
-# Add key to Keychain (one-time setup)
-security add-generic-password -a "$USER" -s 'openevent-api-test-key' -w 'sk-your-key-here'
-
-# Then source scripts/oe_env.sh will auto-load it
-```
-
-### 2. Setup Frontend
+### 2. (Optional) Setup Frontend Locally
+The Hostinger deployment only runs the backend, but you can still launch the dev UI if needed:
 ```bash
 cd atelier-ai-frontend
 npm install
@@ -175,6 +182,41 @@ pytest backend/tests/workflows/test_workflow_v3_alignment.py
 - **Site Visit Logic**: Dedicated sub-flow for handling venue tours.
 - **Deposit Configuration**: Managers can now set global deposit rules.
 - **HIL Toggle for AI Replies**: Optional review of all AI-generated responses before sending.
+
+---
+
+## 🚀 Deploying to Hostinger (Backend Only)
+
+This branch is wired for the Hostinger VPS described in `deploy/README.md`. Quick steps:
+
+1. **SSH into the VPS**
+   ```bash
+   ssh root@72.60.135.183
+   ```
+2. **Clone / update the repo**
+   ```bash
+   cd /opt
+   git clone https://github.com/YOUR_USERNAME/OpenEvent-AI.git openevent
+   cd openevent
+   git checkout integration/hostinger-backend
+   ```
+3. **Run the provisioning script**
+   ```bash
+   chmod +x deploy/*.sh
+   ./deploy/setup-vps.sh
+   ```
+4. **Edit `/opt/openevent/.env` to add your real secrets (the tracked `.env` ships with placeholders only).**
+5. **Restart the service**
+   ```bash
+   systemctl restart openevent
+   systemctl status openevent
+   ```
+6. **Verify the API**
+   ```bash
+   curl http://72.60.135.183:8000/api/workflow/health
+   ```
+
+For the complete checklist (nginx config, firewall, API smoke tests), see `deploy/README.md` and `deploy/API_TESTS.md`.
 
 ### Configuration
 Key environment variables (create a `.env` file):

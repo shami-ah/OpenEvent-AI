@@ -60,6 +60,7 @@ cd openevent
 chmod +x deploy/*.sh
 ./deploy/setup-vps.sh
 ```
+This installs the pinned backend dependencies from `requirements-dev`.
 
 ---
 
@@ -153,6 +154,15 @@ These endpoints are ready to use. **For detailed curl examples and test results,
 | `/api/qna` | GET | Q&A data |
 | `/api/test-data/rooms` | GET | Room data |
 | `/api/snapshots/{id}` | GET | Snapshot data |
+
+**Backend source references (for quick edits)**  
+All endpoints above live in `backend/main.py`:
+
+- Conversation entry points: `/api/start-conversation` and `/api/send-message` around lines 721–998.
+- Manager task endpoints: `/api/tasks/pending`, `/api/tasks/{task_id}/approve`, `/api/tasks/{task_id}/reject`, `/api/tasks/cleanup` around lines 1001–1190.
+- Health + HIL toggles: `/api/workflow/health` and `/api/workflow/hil-status` around lines 1726–1743.
+- Config/deposit flow: `/api/config/global-deposit` (GET/POST) near lines 1762–1811, `/api/event/deposit/pay` and `/api/event/{event_id}/deposit` around lines 1903–2009.
+- Test data + reference endpoints: `/api/test-data/rooms`, `/api/test-data/catering`, `/api/qna`, and `/api/snapshots/*` around lines 1495–1710.
 
 ---
 

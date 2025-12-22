@@ -11,7 +11,7 @@ echo "Pulling latest changes..."
 git pull origin main
 
 echo "Installing any new dependencies..."
-./venv/bin/pip install -r requirements.txt
+./venv/bin/pip install -r requirements-dev
 
 echo "Restarting service..."
 sudo systemctl restart openevent
