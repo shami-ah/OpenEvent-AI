@@ -1,6 +1,8 @@
 # API Endpoint Tests
 
-All endpoints tested without frontend on 2025-12-16.
+All endpoints tested without frontend.
+
+**Last updated:** 2025-12-23 (added HIL mode toggle endpoints)
 
 ## How to Run Tests
 
@@ -169,23 +171,72 @@ RESULT:   ✅ PASS (endpoint exists and functional)
 
 ---
 
+### TEST 12: GET /api/config/hil-mode (NEW)
+```
+INPUT:    curl http://localhost:8000/api/config/hil-mode
+
+EXPECTED: {enabled: boolean, source: "database"|"environment"|"default"}
+
+OUTPUT:   {"enabled":false,"source":"default"}
+
+RESULT:   ✅ PASS
+
+NOTES:    Returns current HIL mode status and where the setting comes from.
+          Priority: database > environment variable > default (false)
+```
+
+---
+
+### TEST 13: POST /api/config/hil-mode (NEW)
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/hil-mode \
+            -H "Content-Type: application/json" \
+            -d '{"enabled": true}'
+
+EXPECTED: {status: "ok", enabled: boolean, message: "..."}
+
+OUTPUT:   {
+            "status": "ok",
+            "enabled": true,
+            "message": "HIL mode enabled. All AI replies now require manager approval."
+          }
+
+RESULT:   ✅ PASS
+
+NOTES:    When enabled, ALL AI-generated replies go to the "AI Reply Approval"
+          queue for manager review before being sent to clients.
+
+          Manager workflow:
+          1. AI generates reply draft
+          2. Draft appears in approval queue
+          3. Manager reviews/edits message
+          4. Manager approves → message sent to client
+          5. Manager rejects → message discarded
+
+          This is RECOMMENDED for production to ensure human oversight.
+```
+
+---
+
 ## Summary
 
-| # | Endpoint | Method | Status |
-|---|----------|--------|--------|
-| 1 | `/api/workflow/health` | GET | ✅ |
-| 2 | `/api/workflow/hil-status` | GET | ✅ |
-| 3 | `/api/tasks/pending` | GET | ✅ |
-| 4 | `/api/config/global-deposit` | GET | ✅ |
-| 5 | `/api/start-conversation` | POST | ✅ |
-| 6 | `/api/send-message` | POST | ✅ |
-| 7 | `/api/qna` | GET | ✅ |
-| 8 | `/api/test-data/catering` | GET | ✅ |
-| 9 | `/api/tasks/{id}/approve` | POST | ✅ |
-| 10 | `/api/tasks/{id}/reject` | POST | ✅ |
-| 11 | `/api/event/deposit/pay` | POST | ✅ |
+| # | Endpoint | Method | Status | Notes |
+|---|----------|--------|--------|-------|
+| 1 | `/api/workflow/health` | GET | ✅ | Health check |
+| 2 | `/api/workflow/hil-status` | GET | ✅ | Quick HIL check |
+| 3 | `/api/tasks/pending` | GET | ✅ | List pending tasks |
+| 4 | `/api/config/global-deposit` | GET | ✅ | Deposit config |
+| 5 | `/api/start-conversation` | POST | ✅ | Start workflow |
+| 6 | `/api/send-message` | POST | ✅ | Continue chat |
+| 7 | `/api/qna` | GET | ✅ | Q&A data |
+| 8 | `/api/test-data/catering` | GET | ✅ | Catering menus |
+| 9 | `/api/tasks/{id}/approve` | POST | ✅ | Approve task |
+| 10 | `/api/tasks/{id}/reject` | POST | ✅ | Reject task |
+| 11 | `/api/event/deposit/pay` | POST | ✅ | Mark deposit paid |
+| 12 | `/api/config/hil-mode` | GET | ✅ | Get HIL mode status |
+| 13 | `/api/config/hil-mode` | POST | ✅ | Toggle HIL mode |
 
-**All 11 endpoints tested and working.**
+**All 13 endpoints tested and working.**
 
 ---
 
