@@ -309,6 +309,9 @@ def _launch_frontend() -> Optional[subprocess.Popen]:
     if not FRONTEND_DIR.exists():
         print(f"[Frontend][WARN] Directory {FRONTEND_DIR} not found; skipping auto-launch.")
         return None
+    if not (FRONTEND_DIR / "package.json").exists():
+        print(f"[Frontend][WARN] No package.json in {FRONTEND_DIR}; skipping auto-launch.")
+        return None
     cmd = ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", str(FRONTEND_PORT)]
     try:
         env = os.environ.copy()
