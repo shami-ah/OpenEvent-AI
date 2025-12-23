@@ -701,6 +701,21 @@ def process(state: WorkflowState) -> GroupResult:
         json.dumps(user_info, ensure_ascii=False),
         outputs=user_info,
     )
+    # [REGEX FALLBACK] If LLM failed to extract date, try regex parsing
+    # This handles cases like "February 14th, 2026" that LLM might miss
+    if not user_info.get("date") and not user_info.get("event_date"):
+        body_text = message_payload.get("body") or ""
+        fallback_year = _fallback_year_from_ts(message_payload.get("ts"))
+        parsed_date = parse_first_date(body_text, fallback_year=fallback_year)
+        if parsed_date:
+            user_info["date"] = parsed_date.isoformat()
+            user_info["event_date"] = format_iso_date_to_ddmmyyyy(parsed_date.isoformat())
+            print(f"[Step1] Regex fallback extracted date: {parsed_date.isoformat()}")
+            # Boost confidence if we found date via regex - indicates valid event request
+            if intent == IntentLabel.EVENT_REQUEST and confidence < 0.90:
+                confidence = 0.90
+                state.confidence = confidence
+                print(f"[Step1] Boosted confidence to {confidence} due to regex date extraction")
     # Preserve raw message content for downstream semantic extraction.
     needs_vague_date_confirmation = _needs_vague_date_confirmation(user_info)
     if needs_vague_date_confirmation:
@@ -1278,6 +1293,8 @@ def _ensure_event_record(
     if not last_event:
         create_event_entry(state.db, event_data)
         event_entry = state.db["events"][-1]
+        # Store thread_id so tasks can be filtered by session in frontend
+        event_entry["thread_id"] = _thread_id(state)
         trace_db_write(_thread_id(state), "Step1_Intake", "db.events.create", {"event_id": event_entry.get("event_id")})
         return event_entry
 
@@ -1289,10 +1306,12 @@ def _ensure_event_record(
     new_event_date = event_data.get("Event Date")
     existing_event_date = last_event.get("chosen_date") or (last_event.get("event_data") or {}).get("Event Date")
 
-    # Different dates = new inquiry, but ONLY if new message actually contains a date
+    # Different dates = new inquiry, but ONLY if BOTH dates are actual dates
     # (not "Not specified" default value)
-    new_date_is_actual = new_event_date and new_event_date not in ("Not specified", "not specified", None, "")
-    if new_date_is_actual and existing_event_date and new_event_date != existing_event_date:
+    placeholder_values = ("Not specified", "not specified", None, "")
+    new_date_is_actual = new_event_date and new_event_date not in placeholder_values
+    existing_date_is_actual = existing_event_date and existing_event_date not in placeholder_values
+    if new_date_is_actual and existing_date_is_actual and new_event_date != existing_event_date:
         should_create_new = True
         trace_db_write(_thread_id(state), "Step1_Intake", "new_event_decision", {
             "reason": "different_date",
@@ -1352,6 +1371,8 @@ def _ensure_event_record(
     if should_create_new:
         create_event_entry(state.db, event_data)
         event_entry = state.db["events"][-1]
+        # Store thread_id so tasks can be filtered by session in frontend
+        event_entry["thread_id"] = _thread_id(state)
         trace_db_write(_thread_id(state), "Step1_Intake", "db.events.create", {
             "event_id": event_entry.get("event_id"),
             "reason": "new_inquiry_detected",
@@ -1362,11 +1383,16 @@ def _ensure_event_record(
     if idx is None:
         create_event_entry(state.db, event_data)
         event_entry = state.db["events"][-1]
+        # Store thread_id so tasks can be filtered by session in frontend
+        event_entry["thread_id"] = _thread_id(state)
         trace_db_write(_thread_id(state), "Step1_Intake", "db.events.create", {"event_id": event_entry.get("event_id")})
         return event_entry
 
     state.updated_fields = update_event_entry(state.db, idx, event_data)
     event_entry = state.db["events"][idx]
+    # Ensure thread_id is set for backward compatibility with existing events
+    if not event_entry.get("thread_id"):
+        event_entry["thread_id"] = _thread_id(state)
     trace_db_write(
         _thread_id(state),
         "Step1_Intake",

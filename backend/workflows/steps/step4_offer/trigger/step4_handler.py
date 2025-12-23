@@ -118,10 +118,14 @@ def process(state: WorkflowState) -> GroupResult:
         state.extras["persist"] = True
 
     if (event_entry.get("billing_requirements") or {}).get("awaiting_billing_for_accept"):
-        message_text = (state.message.body or "").strip() if state.message else ""
-        if message_text:
-            event_entry.setdefault("event_data", {})["Billing Address"] = message_text
-            state.extras["persist"] = True
+        # Skip billing capture for synthetic deposit payment messages
+        # (their body is "I have paid the deposit." which would corrupt billing)
+        is_deposit_signal = (state.message.extras or {}).get("deposit_just_paid", False)
+        if not is_deposit_signal:
+            message_text = (state.message.body or "").strip() if state.message else ""
+            if message_text:
+                event_entry.setdefault("event_data", {})["Billing Address"] = message_text
+                state.extras["persist"] = True
 
     billing_missing = _refresh_billing(event_entry)
     state.extras["persist"] = True
@@ -458,6 +462,18 @@ def process(state: WorkflowState) -> GroupResult:
         state.extras["persist"] = True
 
     _ensure_products_container(event_entry)
+    # [SKIP PRODUCTS TEXT DETECTION] Detect "no extras", "skip products" etc. from message body
+    if state.user_info is not None:
+        message_body = (state.message.body or "").lower() if state.message else ""
+        skip_phrases = (
+            "no extras", "keine extras", "skip products", "skip product",
+            "without extras", "ohne extras", "no add-ons", "no addons",
+            "proceed without", "just the room", "nur den raum",
+            "no catering", "keine produkte", "no products",
+        )
+        if any(phrase in message_body for phrase in skip_phrases):
+            state.user_info["skip_products"] = True
+            print(f"[Step4] Detected skip products phrase in message")
     products_changed = _apply_product_operations(event_entry, state.user_info or {})
     if products_changed:
         state.extras["persist"] = True
@@ -751,6 +767,33 @@ def _handle_products_pending(state: WorkflowState, event_entry: Dict[str, Any], 
         }
         state.add_draft_message(draft_message)
         append_audit_entry(event_entry, 4, 4, "offer_products_prompt")
+    else:
+        # Still awaiting products - re-prompt with variation to avoid silent fallback
+        repeat_prompt = (
+            "I still need your product preferences before preparing the offer. "
+            "Would you like catering, beverages, or any add-ons? "
+            "You can also say 'no extras' to proceed without additional products."
+        )
+        draft_message = {
+            "body_markdown": repeat_prompt,
+            "step": 4,
+            "next_step": "Share preferred products",
+            "thread_state": "Awaiting Client",
+            "topic": "offer_products_repeat_prompt",
+            "requires_approval": False,
+            "actions": [
+                {
+                    "type": "share_products",
+                    "label": "Add products",
+                },
+                {
+                    "type": "skip_products",
+                    "label": "No extras needed",
+                },
+            ],
+        }
+        state.add_draft_message(draft_message)
+        append_audit_entry(event_entry, 4, 4, "offer_products_repeat_prompt")
 
     write_stage(event_entry, current_step=WorkflowStep.STEP_4)
     update_event_metadata(event_entry, thread_state="Awaiting Client")
