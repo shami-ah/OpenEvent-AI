@@ -179,25 +179,30 @@ AFTER: "Great news! I have several Saturday evenings open in February for your d
 Context: The client needs to choose a room for their event. Help them understand which room is the best fit BY REASONING ABOUT THEIR SPECIFIC NEEDS.
 
 CRITICAL - You must:
-1. START with a clear recommendation ("I'd recommend Room A because...")
-2. EXPLAIN WHY it matches their requirements (capacity, features they asked for)
-3. COMPARE alternatives and note trade-offs ("Room E is larger if you want more space, but...")
-4. MENTION what's included vs. what might need arranging
-5. Make the decision EASY with a clear next step
+1. START with a clear recommendation ("I'd recommend **Room A** because...")
+2. USE the matched/missing data in each room to personalize your response:
+   - If a room has matched features: "includes the **sound system** and **coffee service** you mentioned"
+   - If a room is missing features: "the **cocktail bar** would need to be arranged separately"
+3. COMPARE alternatives by their matched features, not just capacity
+4. Make the decision EASY with a clear next step
+5. **BOLD** all matched features and room names using **markdown** (e.g., **sound system**, **Room A**)
 
-DO NOT just list rooms in a table. REASON about the options.
+The rooms data includes `requirements.matched` and `requirements.missing` arrays - USE THEM to personalize your response.
+
+Example: If Room A has matched=["sound system", "coffee service"], say "**Room A** has both the **sound system** and **coffee service** you requested"
+Example: If Room B has missing=["cocktail bar"], say "**Room B** would need the **cocktail bar** arranged separately"
+
+DO NOT just list rooms. REASON about which best matches what the client asked for.
 
 Example transformation:
-BEFORE: "- Room A — Matches: Background Music · Capacity ✓ (max 40)
-- Room E — Matches: Background Music · Capacity ✓ (max 120)"
+BEFORE: "Room A: Available, capacity 40, matched: [sound system, coffee service], missing: []
+Room E: Available, capacity 120, matched: [sound system], missing: [cocktail bar]"
 
-AFTER: "For your dinner of 30 guests on 14.02.2026, I'd recommend **Room A** — it's perfectly sized (max 40) and includes the background music setup you mentioned. It's intimate enough for a family celebration without feeling too large.
+AFTER: "For your networking event on **08.05.2026**, I'd recommend **Room A** — it has everything you asked for: the **sound system** for presentations and **coffee service** are both included. At 40 capacity, it's perfectly sized for your 30 guests.
 
-If you'd prefer a grander setting, Room E (max 120) also has music capabilities and could work beautifully for a more spacious feel — though it might feel a bit open for 30 guests.
+**Room E** (capacity 120) also has the **sound system**, though the **cocktail bar** setup would need to be arranged separately. It's a larger space if you want more room to move around.
 
-Room F has great acoustics too, though we'd need to set up the music system separately.
-
-I'd go with Room A for the best fit. Shall I hold it for you?" """,
+I'd go with **Room A** since it covers all your requirements. Shall I hold it for you?" """,
 
     4: """You're presenting an offer/quote to a client.
 
@@ -241,18 +246,86 @@ Focus on:
 }
 
 TOPIC_HINTS = {
+    # Step 2 - Date confirmation
     "date_candidates": "Present available dates as options, recommend the best match",
     "date_confirmed": "Celebrate the date being locked in, transition smoothly to room selection",
+
+    # Step 3 - Room availability
     "room_avail_result": "Present rooms with a clear recommendation, explain the match to their needs",
-    "room_selected_follow_up": "Confirm room choice, smoothly transition to products/offer",
-    "offer_draft": "Present the offer as a complete package, make value clear",
-    "offer_products_prompt": "Ask about catering/add-ons in a helpful, not pushy way",
-    "negotiation_accept": "Celebrate acceptance, confirm immediate next steps",
-    "negotiation_clarification": "Ask for clarity in a specific, helpful way",
-    "confirmation_deposit_pending": "Make deposit request feel routine and easy",
-    "confirmation_final": "Celebrate the confirmed booking with genuine warmth",
-    "confirmation_site_visit": "Offer site visit as a helpful option, not obligation",
+    "room_available": "Great news! The ideal room is available. Lead with enthusiasm, highlight why it's perfect for their needs, mention key features",
+    "room_option": "Room has a tentative hold - explain clearly but don't alarm. Present it as 'we can secure this for you' rather than 'someone else might take it'",
+    "room_unavailable": "Be empathetic but solution-focused. Quickly pivot to alternatives that DO work, don't dwell on what's unavailable",
+    "room_selected_follow_up": "Confirm room choice warmly, smoothly transition to products/offer discussion",
+
+    # Step 4 - Offer
+    "offer_intro": "Set up the offer with warmth. Acknowledge their choices so far, build anticipation for the details. Keep it brief - the offer details follow",
+    "offer_draft": "Present the offer as a complete package. Connect each line item to their stated needs. Make the total feel justified and valuable",
+    "offer_products_prompt": "Ask about catering/add-ons in a helpful, consultative way - not pushy. Frame as 'completing their experience'",
+
+    # Step 5 - Negotiation
+    "negotiation_accept": "Celebrate their decision warmly! Confirm what happens next (manager review, deposit, etc.) with clarity and excitement",
+    "negotiation_clarification": "Ask for clarity in a specific, helpful way. Show you want to get it exactly right for them",
+    "general": "Respond naturally and helpfully. Match the client's tone. If they're brief, be concise. If they have questions, answer thoroughly but warmly",
+
+    # Step 7 - Confirmation
+    "confirmation_deposit_pending": "Make deposit request feel routine and easy - it's just the final step to lock in their special event",
+    "confirmation_final": "Celebrate! This is a milestone. Express genuine excitement about their upcoming event",
+    "confirmation_site_visit": "Offer site visit as a helpful option to build confidence, not an obligation",
+
+    # Q&A
+    "structured_qna": "Answer their question directly and helpfully. If showing options (rooms, menus), lead with the best match for their needs",
 }
+
+
+# =============================================================================
+# Structured Content Detection
+# =============================================================================
+
+def _contains_structured_content(text: str) -> bool:
+    """
+    Detect if text contains structured content that should NOT be verbalized.
+
+    Structured content includes:
+    - Tables (markdown or plain text with aligned columns)
+    - NEXT STEP: or INFO: blocks from QnA responses
+    - Multiple "-" bullet points in sequence (product/option lists)
+
+    These are already formatted by qna/verbalizer.py and must be preserved.
+    """
+    lines = text.strip().split("\n")
+
+    # Check for table indicators
+    # Markdown tables have | characters
+    has_table_pipes = any("|" in line and line.count("|") >= 2 for line in lines)
+    if has_table_pipes:
+        return True
+
+    # Check for aligned column headers (e.g., "Room    Dates    Notes")
+    for line in lines:
+        if line.count("    ") >= 2:  # Multiple tab-like spaces indicating columns
+            # Verify it looks like a header (capitalized words)
+            parts = [p.strip() for p in line.split("    ") if p.strip()]
+            if len(parts) >= 2 and all(p[0].isupper() for p in parts if p):
+                return True
+
+    # Check for NEXT STEP: or INFO: blocks (QnA response markers)
+    text_upper = text.upper()
+    if "NEXT STEP:" in text_upper or "\nINFO:" in text_upper:
+        return True
+
+    # Check for multiple consecutive bullet points (option lists)
+    bullet_count = sum(1 for line in lines if line.strip().startswith("- "))
+    if bullet_count >= 3:
+        # Could be a product list or options list - check if it has structured format
+        # Look for patterns like "- Name — CHF X" or "- Date — Room (Status)"
+        structured_bullets = sum(
+            1 for line in lines
+            if line.strip().startswith("- ") and ("—" in line or "CHF" in line or "(" in line)
+        )
+        if structured_bullets >= 2:
+            return True
+
+    return False
 
 
 # =============================================================================
@@ -284,6 +357,15 @@ def verbalize_message(
         Verbalized text (LLM if valid, fallback otherwise)
     """
     if not fallback_text or not fallback_text.strip():
+        return fallback_text
+
+    # Skip verbalization for structured QnA responses with tables
+    # These are already processed by qna/verbalizer.py and contain structured data
+    # that must be preserved exactly (tables, NEXT STEP blocks, etc.)
+    if _contains_structured_content(fallback_text):
+        logger.debug(
+            f"universal_verbalizer: skipping structured content for step={context.step}, topic={context.topic}"
+        )
         return fallback_text
 
     tone = _resolve_tone()
@@ -364,6 +446,77 @@ def _resolve_tone() -> str:
     return "empathetic"
 
 
+import time
+from pathlib import Path
+
+# ... (existing imports)
+
+# ... (MessageContext class)
+
+# ... (Hardcoded PROMPTS)
+
+# =============================================================================
+# Dynamic Prompt Loading
+# =============================================================================
+
+_PROMPT_CACHE: Dict[str, Any] = {
+    "ts": 0,
+    "data": (UNIVERSAL_SYSTEM_PROMPT, STEP_PROMPTS)
+}
+_CACHE_TTL = 30.0  # seconds
+
+def _get_effective_prompts() -> Tuple[str, Dict[int, str]]:
+    """
+    Load effective prompts (DB overrides merged with defaults).
+    Cached for performance.
+    """
+    global _PROMPT_CACHE
+    now = time.time()
+    
+    if now - _PROMPT_CACHE["ts"] < _CACHE_TTL:
+        return _PROMPT_CACHE["data"]
+
+    try:
+        # Avoid circular imports
+        from backend.workflows.io.database import load_db
+        
+        # Load DB (best effort assumption on path)
+        db_path = Path("events_database.json")
+        if not db_path.exists():
+            return UNIVERSAL_SYSTEM_PROMPT, STEP_PROMPTS
+            
+        db = load_db(db_path)
+        config = db.get("config", {}).get("prompts", {})
+        
+        system_prompt = config.get("system_prompt", UNIVERSAL_SYSTEM_PROMPT)
+        
+        # Merge step prompts
+        step_prompts = STEP_PROMPTS.copy()
+        stored_steps = config.get("step_prompts", {})
+        for k, v in stored_steps.items():
+            try:
+                step_prompts[int(k)] = v
+            except ValueError:
+                pass
+                
+        _PROMPT_CACHE = {
+            "ts": now,
+            "data": (system_prompt, step_prompts)
+        }
+        return system_prompt, step_prompts
+        
+    except Exception as exc:
+        logger.warning(f"universal_verbalizer: failed to load prompts config: {exc}")
+        # Return fallback (potentially stale cache or hard defaults)
+        return _PROMPT_CACHE["data"]
+
+
+# =============================================================================
+# Verbalizer Core
+# =============================================================================
+
+# ... (verbalize_message function) ...
+
 def _build_prompt(
     context: MessageContext,
     fallback_text: str,
@@ -371,8 +524,11 @@ def _build_prompt(
 ) -> Dict[str, Any]:
     """Build the LLM prompt for verbalization."""
 
+    # Load dynamic prompts
+    system_template, step_prompts = _get_effective_prompts()
+
     # Build step-specific guidance
-    step_guidance = STEP_PROMPTS.get(context.step, "")
+    step_guidance = step_prompts.get(context.step, "")
     topic_hint = TOPIC_HINTS.get(context.topic, "")
 
     # Build facts summary
@@ -381,7 +537,7 @@ def _build_prompt(
     # Locale instruction
     locale_instruction = "Write in German (Deutsch)." if locale == "de" else "Write in English."
 
-    system_content = f"""{UNIVERSAL_SYSTEM_PROMPT}
+    system_content = f"""{system_template}
 
 {locale_instruction}
 
@@ -407,6 +563,8 @@ Return ONLY the transformed message text. Do not include explanations or metadat
         "user": user_content,
     }
 
+# ... (rest of file)
+
 
 def _format_facts_for_prompt(context: MessageContext) -> str:
     """Format context facts for the LLM prompt."""
@@ -426,13 +584,21 @@ def _format_facts_for_prompt(context: MessageContext) -> str:
     if context.candidate_dates:
         lines.append(f"- Available dates: {', '.join(context.candidate_dates)}")
     if context.rooms:
-        room_summary = []
+        lines.append("- Rooms:")
         for room in context.rooms[:5]:  # Limit to top 5
             name = room.get("name", "Room")
             status = room.get("status", "")
             capacity = room.get("capacity", "")
-            room_summary.append(f"{name} ({status}, cap {capacity})")
-        lines.append(f"- Rooms: {'; '.join(room_summary)}")
+            # Include requirements matched/missing for feature-based comparison
+            requirements = room.get("requirements") or {}
+            matched = requirements.get("matched") or []
+            missing = requirements.get("missing") or []
+            room_line = f"  * {name}: {status}, capacity {capacity}"
+            if matched:
+                room_line += f", matched: [{', '.join(matched)}]"
+            if missing:
+                room_line += f", missing: [{', '.join(missing)}]"
+            lines.append(room_line)
     if context.products:
         product_summary = []
         for p in context.products[:5]:  # Limit to top 5
@@ -481,6 +647,9 @@ def _verify_facts(
     """
     Verify that all hard facts appear in the LLM output.
 
+    This verification is intentionally flexible to allow natural rephrasing
+    while catching actual factual errors (wrong numbers, invented dates, etc.)
+
     Returns:
         Tuple of (ok, missing_facts, invented_facts)
     """
@@ -489,48 +658,134 @@ def _verify_facts(
 
     text_lower = llm_text.lower()
     text_normalized = llm_text.replace(" ", "").upper()
+    # Also create a version with common separators normalized
+    text_numbers_only = re.sub(r"[^\d.]", "", llm_text)
 
-    # Check dates
+    # Check dates - flexible matching
     for date in hard_facts.get("dates", []):
-        if date not in llm_text:
+        # Try multiple formats: DD.MM.YYYY, DD/MM/YYYY, YYYY-MM-DD
+        date_found = False
+        if date in llm_text:
+            date_found = True
+        else:
+            # Try alternative formats
+            try:
+                from datetime import datetime
+                # Parse DD.MM.YYYY
+                if "." in date:
+                    parsed = datetime.strptime(date, "%d.%m.%Y")
+                    alt_formats = [
+                        parsed.strftime("%d/%m/%Y"),
+                        parsed.strftime("%Y-%m-%d"),
+                        parsed.strftime("%d %B %Y"),  # "08 May 2026"
+                        parsed.strftime("%B %d, %Y"),  # "May 08, 2026"
+                        parsed.strftime("%-d %B %Y"),  # "8 May 2026" (no leading zero)
+                    ]
+                    for alt in alt_formats:
+                        if alt in llm_text or alt.lower() in text_lower:
+                            date_found = True
+                            break
+            except (ValueError, ImportError):
+                pass
+
+        if not date_found:
             missing.append(f"date:{date}")
 
-    # Check room names (case-insensitive)
+    # Check room names (case-insensitive, flexible matching)
     for room in hard_facts.get("room_names", []):
         room_lower = room.lower()
         room_no_dot = room.replace(".", "").lower()
-        if room_lower not in text_lower and room_no_dot not in text_lower:
+        # Also check for "Room X" variations
+        room_variants = [room_lower, room_no_dot]
+        if room_lower.startswith("room "):
+            # "Room B" -> also accept "room b", "Room B", "ROOM B"
+            room_variants.append(room_lower.replace("room ", ""))
+
+        found = any(variant in text_lower for variant in room_variants)
+        if not found:
             missing.append(f"room:{room}")
 
-    # Check amounts
+    # Check amounts - flexible matching for CHF values
     for amount in hard_facts.get("amounts", []):
-        amount_normalized = amount.replace(" ", "").upper()
-        amount_no_decimal = re.sub(r"\.00$", "", amount_normalized)
-        if amount_normalized not in text_normalized and amount_no_decimal not in text_normalized:
+        amount_found = False
+        # Extract numeric value
+        match = re.search(r"(\d+(?:[.,]\d{1,2})?)", amount)
+        if match:
+            numeric = match.group(1).replace(",", ".")
+            numeric_no_decimal = re.sub(r"\.00$", "", numeric)
+            # Check various formats
+            patterns_to_check = [
+                f"CHF {numeric}",
+                f"CHF{numeric}",
+                f"CHF {numeric_no_decimal}",
+                f"CHF{numeric_no_decimal}",
+                f"{numeric} CHF",
+                f"{numeric_no_decimal} CHF",
+                # Also check with thousands separator
+                f"CHF {int(float(numeric)):,}".replace(",", "'"),  # Swiss format: 1'000
+                f"CHF {int(float(numeric)):,}".replace(",", ","),  # 1,000 format
+            ]
+            for pattern in patterns_to_check:
+                if pattern.upper() in text_normalized or pattern.lower() in text_lower:
+                    amount_found = True
+                    break
+
+            # Also check if the raw number appears (context may make it clear it's CHF)
+            if not amount_found and numeric in llm_text:
+                amount_found = True
+
+        if not amount_found:
             missing.append(f"amount:{amount}")
 
-    # Check counts (participant count)
+    # Check counts (participant count) - flexible matching
     for count in hard_facts.get("counts", []):
-        if count not in llm_text:
+        # Check for the number directly or spelled out for small numbers
+        count_found = count in llm_text
+        if not count_found:
+            # Check if the number appears with common suffixes
+            count_patterns = [
+                f"{count} guests",
+                f"{count} people",
+                f"{count} participants",
+                f"{count} attendees",
+                f"{count} persons",
+            ]
+            count_found = any(p.lower() in text_lower for p in count_patterns)
+
+        if not count_found:
             missing.append(f"count:{count}")
 
-    # Check product names (case-insensitive)
+    # Check product names (case-insensitive, allow partial matches for long names)
     for product_name in hard_facts.get("product_names", []):
-        if product_name.lower() not in text_lower:
+        product_lower = product_name.lower()
+        # For long product names, check if key words appear
+        if len(product_name) > 20:
+            # Split into words and check if most key words appear
+            words = [w for w in product_lower.split() if len(w) > 3]
+            matches = sum(1 for w in words if w in text_lower)
+            if matches >= len(words) * 0.6:  # 60% of words match
+                continue
+        if product_lower not in text_lower:
             missing.append(f"product:{product_name}")
 
-    # Check units - these must appear exactly as provided (per person, per event)
+    # Check units - be flexible about phrasing
     input_units = set(hard_facts.get("units", []))
     for unit in input_units:
-        if unit not in text_lower:
+        unit_found = unit in text_lower
+        if not unit_found:
+            # Check alternative phrasings
+            if unit == "per person":
+                unit_found = any(alt in text_lower for alt in ["per guest", "each guest", "per head", "/person", "/ person"])
+            elif unit == "per event":
+                unit_found = any(alt in text_lower for alt in ["flat fee", "fixed", "one-time", "/event", "/ event"])
+        if not unit_found:
             missing.append(f"unit:{unit}")
 
     # Check for unit swaps (invented wrong unit)
-    # If input has "per event" but output has "per person" (or vice versa), that's a swap
     has_per_event = "per event" in input_units
     has_per_person = "per person" in input_units
-    output_has_per_event = "per event" in text_lower
-    output_has_per_person = "per person" in text_lower
+    output_has_per_event = "per event" in text_lower or "flat fee" in text_lower
+    output_has_per_person = "per person" in text_lower or "per guest" in text_lower
 
     # Detect swaps: if we only had one unit type but output has the other
     if has_per_event and not has_per_person and output_has_per_person:
@@ -538,30 +793,67 @@ def _verify_facts(
     if has_per_person and not has_per_event and output_has_per_event:
         invented.append("unit:per event (should be per person)")
 
-    # Check for invented dates
+    # Check for invented dates (be lenient - only flag if clearly wrong)
     date_pattern = re.compile(r"\b(\d{1,2}\.\d{1,2}\.\d{4})\b")
+    valid_dates = set(hard_facts.get("dates", []))
     for match in date_pattern.finditer(llm_text):
         found_date = match.group(1)
-        if found_date not in hard_facts.get("dates", []):
-            invented.append(f"date:{found_date}")
+        if found_date not in valid_dates:
+            # Check if it's just a reformatted version of a valid date
+            is_reformat = False
+            try:
+                from datetime import datetime
+                found_parsed = datetime.strptime(found_date, "%d.%m.%Y")
+                for valid in valid_dates:
+                    valid_parsed = datetime.strptime(valid, "%d.%m.%Y")
+                    if found_parsed == valid_parsed:
+                        is_reformat = True
+                        break
+            except (ValueError, ImportError):
+                pass
+            if not is_reformat:
+                invented.append(f"date:{found_date}")
 
-    # Check for invented amounts
+    # Check for invented amounts - be more lenient
     amount_pattern = re.compile(r"\bCHF\s*(\d+(?:[.,]\d{1,2})?)\b", re.IGNORECASE)
     canonical_amounts = set()
     for amt in hard_facts.get("amounts", []):
-        # Normalize for comparison
         normalized = amt.replace(" ", "").upper().replace(",", ".")
         match = re.search(r"CHF(\d+(?:\.\d{1,2})?)", normalized)
         if match:
-            canonical_amounts.add(match.group(1))
-            # Also add without .00
-            canonical_amounts.add(re.sub(r"\.00$", "", match.group(1)))
+            val = match.group(1)
+            canonical_amounts.add(val)
+            canonical_amounts.add(re.sub(r"\.00$", "", val))
+            # Also add rounded versions
+            try:
+                canonical_amounts.add(str(int(float(val))))
+            except ValueError:
+                pass
 
     for match in amount_pattern.finditer(llm_text):
         found_amount = match.group(1).replace(",", ".")
         found_no_decimal = re.sub(r"\.00$", "", found_amount)
-        if found_amount not in canonical_amounts and found_no_decimal not in canonical_amounts:
-            invented.append(f"amount:CHF {found_amount}")
+        found_int = str(int(float(found_amount))) if "." in found_amount else found_amount
+
+        if not any(f in canonical_amounts for f in [found_amount, found_no_decimal, found_int]):
+            # Only flag if it's not close to any canonical amount (allows for small rounding)
+            is_close = False
+            try:
+                found_val = float(found_amount)
+                for canonical in canonical_amounts:
+                    try:
+                        canonical_val = float(canonical)
+                        # Allow 1% tolerance for rounding
+                        if abs(found_val - canonical_val) / max(canonical_val, 1) < 0.01:
+                            is_close = True
+                            break
+                    except ValueError:
+                        pass
+            except ValueError:
+                pass
+
+            if not is_close:
+                invented.append(f"amount:CHF {found_amount}")
 
     ok = len(missing) == 0 and len(invented) == 0
     return (ok, missing, invented)

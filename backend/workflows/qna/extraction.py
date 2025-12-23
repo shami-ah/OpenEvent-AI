@@ -10,8 +10,14 @@ except Exception:  # pragma: no cover - library may be unavailable in tests
     OpenAI = None  # type: ignore
 
 from backend.workflows.common.types import WorkflowState
-from backend.workflows.nlu.general_qna_classifier import quick_general_qna_scan
+# MIGRATED: from backend.workflows.nlu.general_qna_classifier -> backend.detection.qna.general_qna
+from backend.detection.qna.general_qna import quick_general_qna_scan
 from backend.utils.openai_key import load_openai_api_key
+from backend.workflows.common.fallback_reason import (
+    create_fallback_reason,
+    llm_disabled_reason,
+    llm_exception_reason,
+)
 
 QNA_EXTRACTION_MODEL = os.getenv("OPEN_EVENT_QNA_EXTRACTION_MODEL", "o3-mini")
 _LLM_ENABLED = bool(load_openai_api_key(required=False) and OpenAI is not None)
@@ -176,7 +182,7 @@ def ensure_qna_extraction(
         extraction = _run_qna_extraction(payload)
     except Exception as exc:  # pragma: no cover - defensive
         state.extras["qna_extraction_error"] = str(exc)
-        extraction = _fallback_extraction(payload)
+        extraction = _fallback_extraction(payload, reason="llm_exception", error=str(exc))
 
     normalized = _normalize_qna_extraction(extraction)
     meta = {
@@ -201,7 +207,7 @@ def ensure_qna_extraction(
 
 def _run_qna_extraction(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not _LLM_ENABLED:
-        return _fallback_extraction(payload)
+        return _fallback_extraction(payload, reason="llm_disabled")
 
     api_key = load_openai_api_key()
     client = OpenAI(api_key=api_key)
@@ -219,18 +225,32 @@ def _run_qna_extraction(payload: Dict[str, Any]) -> Dict[str, Any]:
     content = response.choices[0].message.content if response.choices else "{}"
     try:
         return json.loads(content or "{}")
-    except json.JSONDecodeError:
-        return _fallback_extraction(payload)
+    except json.JSONDecodeError as exc:
+        return _fallback_extraction(payload, reason="json_decode_error", error=str(exc))
 
 
-def _fallback_extraction(payload: Dict[str, Any]) -> Dict[str, Any]:
-    # Deterministic heuristic fallback used in offline/dev mode.
+def _fallback_extraction(
+    payload: Dict[str, Any],
+    reason: str = "llm_disabled",
+    error: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Deterministic heuristic fallback used in offline/dev mode.
+
+    Args:
+        payload: The extraction payload
+        reason: Why fallback was triggered (llm_disabled, llm_exception, json_decode_error)
+        error: Optional error message for exceptions
+    """
     return {
         "msg_type": "event",
         "qna_intent": "select_static",
         "qna_subtype": "non_event_info",
         "q_values": {key: None for key in Q_VALUE_KEYS},
         "qna_requirements": None,
+        "_fallback": True,
+        "_fallback_reason": reason,
+        "_fallback_error": error,
     }
 
 

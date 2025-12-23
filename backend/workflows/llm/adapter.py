@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from backend.adapters.agent_adapter import AgentAdapter, StubAgentAdapter, get_agent_adapter, reset_agent_adapter
 from backend.domain import IntentLabel
 from backend.llm.provider_registry import get_provider, reset_provider_for_tests
+from backend.workflows.common.fallback_reason import create_fallback_reason
 
 from backend.prefs.semantics import normalize_catering, normalize_products
 from backend.services.products import list_product_records, normalise_product_payload
@@ -299,21 +300,53 @@ def _invoke_provider_with_retry(payload: Dict[str, str], phase: str) -> Optional
     return None
 
 
-def _fallback_analysis(payload: Dict[str, str]) -> Dict[str, Any]:
+def _fallback_analysis(
+    payload: Dict[str, str],
+    original_error: Optional[str] = None,
+) -> Dict[str, Any]:
     global _LAST_CALL_METADATA
+    fallback_reason: Optional[str] = None
+    fallback_error: Optional[str] = None
+
     try:
         result = _FALLBACK_ADAPTER.analyze_message(payload)
         validated = _validated_analysis(result)
         if validated is not None:
             _LAST_CALL_METADATA = {"phase": "analysis", "adapter": "stub"}
             return validated
+        fallback_reason = "stub_returned_invalid"
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.debug("Stub fallback failed: %s", exc)
-    _LAST_CALL_METADATA = {"phase": "analysis", "adapter": "fallback"}
+        fallback_reason = "stub_exception"
+        fallback_error = str(exc)
+
+    # If we had an original error from the provider, use that
+    if original_error:
+        fallback_reason = "provider_failed"
+        fallback_error = original_error
+
+    _LAST_CALL_METADATA = {
+        "phase": "analysis",
+        "adapter": "fallback",
+        "fallback_reason": fallback_reason,
+        "fallback_error": fallback_error,
+    }
+
+    # Create structured fallback reason for diagnostics
+    reason = create_fallback_reason(
+        source="intent_adapter",
+        trigger=fallback_reason or "unknown",
+        failed_conditions=["provider_unavailable", "stub_failed"],
+        context={"message_preview": str(payload.get("body", ""))[:100]},
+        original_error=fallback_error,
+    )
+
     return {
         "intent": IntentLabel.NON_EVENT.value,
         "confidence": 0.0,
         "fields": {},
+        "_fallback": True,
+        "_fallback_reason": reason.to_dict(),
     }
 
 

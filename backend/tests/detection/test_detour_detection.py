@@ -14,7 +14,8 @@ Test ID format: DET_DETOUR_<category>_<number>_<description>
 import pytest
 from typing import Dict, Any, Optional
 
-from backend.workflows.nlu.keyword_buckets import (
+# MIGRATED: from backend.workflows.nlu.keyword_buckets -> backend.detection.keywords.buckets
+from backend.detection.keywords.buckets import (
     DetourMode,
     MessageIntent,
     ChangeIntentResult,
@@ -32,7 +33,8 @@ from backend.workflows.change_propagation import (
     detect_change_type_enhanced,
     detect_change_with_fallback,
 )
-from backend.workflows.nlu.semantic_matchers import (
+# MIGRATED: from backend.workflows.nlu.semantic_matchers -> backend.detection.response.matchers
+from backend.detection.response.matchers import (
     matches_change_pattern_enhanced,
     is_pure_qa_message,
 )

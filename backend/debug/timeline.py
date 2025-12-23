@@ -87,6 +87,15 @@ def mark_closed(thread_id: str, reason: str = "closed") -> str:
     _ensure_dirs()
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
     destination = ARCH / f"{timestamp}__{_sanitise(thread_id)}.jsonl"
+
+    # Also close the human-readable live log
+    try:
+        from . import live_log  # pylint: disable=import-outside-toplevel
+
+        live_log.close_log(thread_id, reason)
+    except Exception:
+        pass
+
     try:
         shutil.move(str(live), str(destination))
         return str(destination)

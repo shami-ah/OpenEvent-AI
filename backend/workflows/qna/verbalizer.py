@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 try:  # pragma: no cover - optional dependency
     from openai import OpenAI  # type: ignore
 except Exception:  # pragma: no cover - dependency may be missing in tests
     OpenAI = None  # type: ignore
 from backend.utils.openai_key import load_openai_api_key
+from backend.workflows.common.fallback_reason import (
+    FallbackReason,
+    append_fallback_diagnostic,
+    llm_disabled_reason,
+    llm_exception_reason,
+    empty_results_reason,
+)
 
 MODEL_NAME = os.getenv("OPEN_EVENT_QNA_VERBALIZER_MODEL", "gpt-4.1-mini")
 _LLM_ENABLED = bool(load_openai_api_key(required=False) and OpenAI is not None)
@@ -26,13 +33,17 @@ def render_qna_answer(payload: Dict[str, Any]) -> Dict[str, Any]:
     When the gpt-4.1-mini runtime is unavailable, fall back to a deterministic formatter so tests
     remain stable.
     """
+    fallback_reason: Optional[FallbackReason] = None
 
     if _LLM_ENABLED:
         try:
             return _call_llm(payload)
-        except Exception:  # pragma: no cover - defensive guard
-            pass
-    return _fallback_answer(payload)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            fallback_reason = llm_exception_reason("qna_verbalizer", exc)
+    else:
+        fallback_reason = llm_disabled_reason("qna_verbalizer")
+
+    return _fallback_answer(payload, fallback_reason)
 
 
 def _call_llm(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -56,7 +67,10 @@ def _call_llm(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _fallback_answer(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _fallback_answer(
+    payload: Dict[str, Any],
+    fallback_reason: Optional[FallbackReason] = None,
+) -> Dict[str, Any]:
     intent = payload.get("qna_intent")
     subtype = payload.get("qna_subtype")
     effective = payload.get("effective") or {}
@@ -107,10 +121,36 @@ def _fallback_answer(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not lines:
         lines.append("Let me know if you'd like me to pull more details.")
 
+    body = "\n".join(lines).strip()
+
+    # Check if this is an empty result fallback (no rooms, dates, or products)
+    rooms_count = len(room_rows)
+    dates_count = len(date_rows)
+    products_count = len(product_rows)
+
+    if fallback_reason is None and rooms_count == 0 and dates_count == 0 and products_count == 0:
+        fallback_reason = empty_results_reason(
+            "qna_verbalizer",
+            rooms_count=rooms_count,
+            dates_count=dates_count,
+            products_count=products_count,
+        )
+
+    # Append diagnostic info if we have a fallback reason
+    if fallback_reason:
+        # Add context about what data was available
+        fallback_reason.context["rooms_count"] = rooms_count
+        fallback_reason.context["dates_count"] = dates_count
+        fallback_reason.context["products_count"] = products_count
+        fallback_reason.context["intent"] = intent
+        fallback_reason.context["subtype"] = subtype
+        body = append_fallback_diagnostic(body, fallback_reason)
+
     return {
         "model": "fallback",
-        "body_markdown": "\n".join(lines).strip(),
+        "body_markdown": body,
         "used_fallback": True,
+        "fallback_reason": fallback_reason.to_dict() if fallback_reason else None,
     }
 
 

@@ -1,16 +1,9 @@
-from __future__ import annotations
+"""
+DEPRECATED: Use backend.workflows.steps.step3_room_availability.llm.analysis instead.
 
-from typing import Dict, List
+This module re-exports from the new canonical location for backwards compatibility.
+"""
 
-__workflow_role__ = "llm"
+from backend.workflows.steps.step3_room_availability.llm.analysis import summarize_room_statuses
 
-
-def summarize_room_statuses(statuses: List[Dict[str, str]]) -> str:
-    """[LLM] Produce a concise textual summary from room status data."""
-
-    fragments = []
-    for entry in statuses:
-        for room, status in entry.items():
-            fragments.append(f"{room}: {status}")
-    joined = "; ".join(fragments) if fragments else "No rooms configured."
-    return f"Room availability summary — {joined}."
+__all__ = ["summarize_room_statuses"]

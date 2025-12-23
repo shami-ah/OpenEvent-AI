@@ -34,7 +34,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 # Import enhanced detection from keyword_buckets
-from backend.workflows.nlu.keyword_buckets import (
+# MIGRATED: from backend.workflows.nlu.keyword_buckets -> backend.detection.keywords.buckets
+from backend.detection.keywords.buckets import (
     DetourMode,
     MessageIntent,
     ChangeIntentResult,

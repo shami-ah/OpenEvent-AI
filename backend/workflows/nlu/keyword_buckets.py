@@ -1,4 +1,14 @@
 """
+DEPRECATED: This module has been moved to backend/detection/keywords/buckets.py
+
+Please update your imports:
+    OLD: from backend.workflows.nlu.keyword_buckets import ...
+    NEW: from backend.detection.keywords.buckets import ...
+
+This file will be removed in a future version.
+
+---
+
 Keyword Buckets for Detour/Change Detection (EN/DE)
 
 This module contains all regex patterns for detecting change intent, revision signals,
@@ -7,13 +17,21 @@ and target-specific patterns. Patterns are organized by language and function.
 Based on UX analysis for comprehensive coverage of venue booking change scenarios.
 
 Usage:
-    from backend.workflows.nlu.keyword_buckets import (
+    from backend.detection.keywords.buckets import (
         CHANGE_VERBS_EN, CHANGE_VERBS_DE,
         REVISION_MARKERS_EN, REVISION_MARKERS_DE,
         TARGET_PATTERNS, PURE_QA_SIGNALS,
         has_revision_signal, has_bound_target, compute_change_intent_score
     )
 """
+
+import warnings
+warnings.warn(
+    "backend.workflows.nlu.keyword_buckets is deprecated. "
+    "Use backend.detection.keywords.buckets instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 from __future__ import annotations
 

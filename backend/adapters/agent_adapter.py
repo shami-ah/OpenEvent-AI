@@ -141,12 +141,30 @@ class StubAgentAdapter(AgentAdapter):
             if len(times) > 1:
                 entities["end_time"] = times[1]
 
-        participants_match = re.search(
-            r"(?:~|approx(?:\.|imately)?|about|around)?\s*(\d{1,4})\s*(?:\+)?\s*(?:ppl|people|guests|participants)\b",
-            lower_body,
-        )
-        if participants_match:
-            entities["participants"] = int(participants_match.group(1))
+        # Participants: support multiple formats and languages
+        participants_patterns = [
+            # English: "60 people/guests/participants/attendees/persons"
+            r"(?:~|approx(?:\.|imately)?|about|around|ca\.?)?\s*(\d{1,4})\s*(?:\+)?\s*(?:ppl|people|guests|participants|attendees|persons|visitors)\b",
+            # Hospitality industry: "30 pax" / "50 covers" / "30 heads"
+            r"(?:~|approx(?:\.|imately)?|about|around|ca\.?)?\s*(\d{1,4})\s*(?:pax|covers|heads)\b",
+            # English: "party/group of 60"
+            r"(?:party|group|team)\s+of\s+(\d{1,4})",
+            # English: "Attendees: 60" / "Expected: 60" / "Attendance: 60"
+            r"(?:attendees|expected|attendance|capacity|headcount)[:\s]+(\d{1,4})\b",
+            # German: "60 Personen/Gäste/Teilnehmer/Leute"
+            r"(?:~|ca\.?|etwa|ungefähr|rund)?\s*(\d{1,4})\s*(?:personen|gäste|teilnehmer|leute|besucher)\b",
+            # French: "60 personnes/invités/participants/convives"
+            r"(?:~|environ|à peu près)?\s*(\d{1,4})\s*(?:personnes|invités|convives)\b",
+            # Italian: "60 persone/ospiti/partecipanti"
+            r"(?:~|circa|approssimativamente)?\s*(\d{1,4})\s*(?:persone|ospiti|partecipanti|invitati)\b",
+            # Spanish: "60 personas/invitados/asistentes"
+            r"(?:~|aproximadamente|alrededor de)?\s*(\d{1,4})\s*(?:personas|invitados|asistentes|huéspedes)\b",
+        ]
+        for pattern in participants_patterns:
+            participants_match = re.search(pattern, lower_body, re.IGNORECASE)
+            if participants_match:
+                entities["participants"] = int(participants_match.group(1))
+                break
 
         room_match = re.search(r"\b(room\s*[a-z0-9]+|punkt\.?null)\b", body, re.IGNORECASE)
         if room_match:
@@ -196,37 +214,87 @@ class StubAgentAdapter(AgentAdapter):
         return entities
 
     def _extract_times(self, text: str) -> List[str]:
-        matches = re.findall(r"\b(\d{1,2}:\d{2})\b", text)
         results: List[str] = []
-        for match in matches:
-            hours, minutes = map(int, match.split(":"))
+
+        # Pattern 1: "6:30 PM" / "9:00 AM" (12h with minutes and AM/PM) - check first!
+        for match in re.finditer(r"\b(\d{1,2})[:.](\d{2})\s*(pm|am)\b", text, re.IGNORECASE):
+            hours, minutes = int(match.group(1)), int(match.group(2))
+            suffix = match.group(3).lower()
+            if suffix == "pm" and hours < 12:
+                hours += 12
+            elif suffix == "am" and hours == 12:
+                hours = 0
             if 0 <= hours <= 23 and 0 <= minutes <= 59:
                 results.append(f"{hours:02d}:{minutes:02d}")
+
+        # Pattern 2: HH:MM or HH.MM with optional Uhr/h suffix (24h format)
+        # Skip if followed by AM/PM (already handled above)
+        for match in re.finditer(r"\b(\d{1,2})[:.](\d{2})(?:\s*(?:uhr|h))?(?!\s*(?:am|pm))\b", text, re.IGNORECASE):
+            hours, minutes = int(match.group(1)), int(match.group(2))
+            if 0 <= hours <= 23 and 0 <= minutes <= 59:
+                time_str = f"{hours:02d}:{minutes:02d}"
+                if time_str not in results:
+                    results.append(time_str)
+
+        # Pattern 3: French format "18h30" / "14h45" (hours + h + minutes)
+        for match in re.finditer(r"\b(\d{1,2})h(\d{2})\b", text, re.IGNORECASE):
+            hours, minutes = int(match.group(1)), int(match.group(2))
+            if 0 <= hours <= 23 and 0 <= minutes <= 59:
+                time_str = f"{hours:02d}:{minutes:02d}"
+                if time_str not in results:
+                    results.append(time_str)
+
+        # Pattern 4: "6pm" / "6 pm" / "18h" / "18 Uhr" (without minutes)
+        # Must have valid hour (not 00)
+        for match in re.finditer(r"\b(\d{1,2})\s*(pm|am|h|uhr)\b", text, re.IGNORECASE):
+            hours = int(match.group(1))
+            if hours == 0:  # Skip "00 Uhr" type false matches
+                continue
+            suffix = match.group(2).lower()
+            if suffix == "pm" and hours < 12:
+                hours += 12
+            elif suffix == "am" and hours == 12:
+                hours = 0
+            if 0 <= hours <= 23:
+                time_str = f"{hours:02d}:00"
+                if time_str not in results:
+                    results.append(time_str)
+
         return results
 
     def _extract_date(self, text: str) -> Optional[str]:
+        # Pattern types: (1) EU numeric, (2) ISO, (3) DD Month YYYY, (4) Month DD, YYYY, (5) Month DD-DD, YYYY (range)
         patterns = [
-            r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b",
-            r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b",
-            r"\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{4})\b",
+            (r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b", "eu"),           # DD.MM.YYYY
+            (r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b", "iso"),            # YYYY-MM-DD
+            (r"\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{4})\b", "dmy"),  # DD Month YYYY
+            # Month DD-DD, YYYY (date range) - captures first day
+            (r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})[\-–—]\d{1,2},?\s+(\d{4})\b", "mdy"),
+            (r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2}),?\s+(\d{4})\b", "mdy"),  # Month DD, YYYY (US format)
         ]
-        for pattern in patterns:
+        for pattern, ptype in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 groups = match.groups()
-                if len(groups) == 3 and groups[0].isdigit():
-                    day, month, year = map(int, groups)
-                elif len(groups) == 3 and groups[1].isdigit():
-                    year, month, day = map(int, groups)
-                else:
-                    day = int(groups[0])
-                    month = self.MONTHS.get(groups[1][:3].lower())
-                    year = int(groups[2])
                 try:
+                    if ptype == "eu":
+                        day, month, year = int(groups[0]), int(groups[1]), int(groups[2])
+                    elif ptype == "iso":
+                        year, month, day = int(groups[0]), int(groups[1]), int(groups[2])
+                    elif ptype == "dmy":
+                        day = int(groups[0])
+                        month = self.MONTHS.get(groups[1][:3].lower())
+                        year = int(groups[2])
+                    elif ptype == "mdy":
+                        month = self.MONTHS.get(groups[0][:3].lower())
+                        day = int(groups[1])
+                        year = int(groups[2])
+                    else:
+                        continue
                     parsed = date(year, month, day)
-                except ValueError:
+                    return parsed.isoformat()
+                except (ValueError, TypeError):
                     continue
-                return parsed.isoformat()
         return None
 
 

@@ -1,4 +1,5 @@
-from backend.workflows.common.confidence import (
+# MIGRATED: from backend.workflows.common.confidence -> backend.detection.intent.confidence
+from backend.detection.intent.confidence import (
     CONFIDENCE_NONSENSE,
     CONFIDENCE_HIGH,
     CONFIDENCE_LOW,

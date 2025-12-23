@@ -206,11 +206,18 @@ def _tokenize(text: str) -> List[str]:
 
 def _score_rooms_by_products(wish_products: Sequence[str]) -> List[Dict[str, Any]]:
     catalog = _room_catalog()
+    rooms_data = {room["name"]: room for room in _load_rooms()}
     recommendations: List[Dict[str, Any]] = []
 
     for room, data in catalog.items():
         phrases = data["phrases"]
         variants_map = data.get("product_variants") or {}
+        # Get room's native features and services for direct matching
+        room_info = rooms_data.get(room, {})
+        room_features = set(_normalise_phrase(f) for f in (room_info.get("features") or []))
+        room_services = set(_normalise_phrase(s) for s in (room_info.get("services") or []))
+        room_all_features = room_features | room_services
+
         score = 0.0
         matched: List[str] = []
         missing: List[str] = []
@@ -219,6 +226,20 @@ def _score_rooms_by_products(wish_products: Sequence[str]) -> List[Dict[str, Any
         matched_lower: Set[str] = set()
         alternatives_seen: Set[Tuple[str, str]] = set()
         for wish in wish_products:
+            wish_normalized = _normalise_phrase(wish)
+
+            # First, check direct match against room features/services
+            feature_match = _match_against_features(wish_normalized, room_all_features)
+            if feature_match:
+                score += 1.0
+                feature_label = wish.title()
+                if feature_label.lower() not in matched_lower:
+                    matched.append(feature_label)
+                    matched_lower.add(feature_label.lower())
+                matches_detail.append(_make_match_entry(wish, feature_label, 1.0))
+                continue
+
+            # Then check product catalog matches
             top_matches = _top_product_matches(wish, variants_map)
             if not top_matches:
                 ratio, label = _best_phrase_match(wish, phrases)
@@ -276,6 +297,27 @@ def _score_rooms_by_products(wish_products: Sequence[str]) -> List[Dict[str, Any
 
     recommendations.sort(key=lambda entry: (-entry["score"], entry["room"]))
     return recommendations[:5]
+
+
+def _match_against_features(wish_normalized: str, features: Set[str]) -> bool:
+    """Check if a wish matches any room feature using fuzzy matching."""
+    if not wish_normalized or not features:
+        return False
+    # Direct containment check
+    for feature in features:
+        if wish_normalized in feature or feature in wish_normalized:
+            return True
+        # Handle common variations: "sound system" vs "sound_system"
+        wish_no_space = wish_normalized.replace(" ", "")
+        feature_no_space = feature.replace(" ", "")
+        if wish_no_space in feature_no_space or feature_no_space in wish_no_space:
+            return True
+    # Fuzzy match for close variations
+    for feature in features:
+        ratio = difflib.SequenceMatcher(a=wish_normalized, b=feature).ratio()
+        if ratio >= 0.8:
+            return True
+    return False
 
 
 def _best_phrase_match(needle: str, phrases: Dict[str, str]) -> Tuple[float, Optional[str]]:

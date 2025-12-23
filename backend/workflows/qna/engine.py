@@ -188,6 +188,44 @@ def _execute_query(context: QnAContext) -> Dict[str, List[Dict[str, Any]]]:
         results["products"] = [_product_record_to_dict(record) for record in records]
         return results
 
+    # Fallback for unhandled subtypes (including "non_event_info"):
+    # If we have captured context (date, attendees), still try to return room availability
+    # This prevents empty results when classification produces unexpected subtypes
+    if subtype in {"non_event_info", "unknown"} or not subtype:
+        # Check if we have any useful context from the captured state
+        has_date = eff["D"].value is not None or eff["D"].source == "C"
+        has_attendees = eff["N"].value is not None or eff["N"].source == "C"
+
+        if has_date or has_attendees:
+            # Try room availability query with whatever context we have
+            rows = fetch_room_availability(
+                date_scope=_date_scope_payload(eff["D"], context.base_date),
+                attendee_scope=eff["N"].value,
+                room_filter=eff["R"].value,
+                exclude_rooms=context.exclude_rooms,
+                product_requirements=eff["P"].value if isinstance(eff["P"].value, list) else [],
+            )
+            results["rooms"] = [_room_availability_to_dict(row) for row in rows]
+            results["dates"] = [entry for entry in results["rooms"] if entry.get("date")]
+            if results["rooms"]:
+                results["notes"].append(
+                    "Showing available rooms based on your event details."
+                )
+            return results
+
+        # No context available - return rooms by capacity as a fallback
+        rows = list_rooms_by_capacity(
+            min_capacity=None,
+            capacity_range=None,
+            product_requirements=[],
+        )
+        results["rooms"] = [_room_summary_to_dict(row) for row in rows]
+        if results["rooms"]:
+            results["notes"].append(
+                "Here are our available rooms. Let me know your date and guest count for specific availability."
+            )
+        return results
+
     return results
 
 

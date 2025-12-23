@@ -12,7 +12,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from backend.llm.intent_classifier import QNA_TYPE_TO_STEP
+# MIGRATED: from backend.llm.intent_classifier -> backend.detection.intent.classifier
+from backend.detection.intent.classifier import QNA_TYPE_TO_STEP
 
 
 # Mapping Q&A types to their select target (what entity they query)

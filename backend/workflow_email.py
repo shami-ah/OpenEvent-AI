@@ -555,6 +555,60 @@ def approve_task_and_send(
         except ValueError:
             pass
 
+    # If this approval is for a Step 4 offer with deposit already paid, continue to site visit
+    if step_num == 4:
+        deposit_info = target_event.get("deposit_info") or {}
+        offer_accepted = target_event.get("offer_accepted", False)
+        deposit_required = deposit_info.get("deposit_required", False)
+        deposit_paid = deposit_info.get("deposit_paid", False)
+
+        # If offer was accepted and deposit is paid (or not required), continue workflow
+        if offer_accepted and (not deposit_required or deposit_paid):
+            from backend.workflows.common.types import IncomingMessage, WorkflowState
+            from backend.workflows.groups import negotiation_close as negotiation_group
+            from backend.workflows.groups.transition_checkpoint import process as process_transition
+
+            print(f"[HIL] Step 4 offer approved with deposit paid, continuing to site visit")
+
+            hil_message = IncomingMessage.from_dict(
+                {
+                    "msg_id": f"hil-approve-{task_id}",
+                    "from_email": target_event.get("event_data", {}).get("Email"),
+                    "subject": "HIL approval",
+                    "body": manager_notes or "Approved",
+                    "ts": datetime.utcnow().isoformat() + "Z",
+                }
+            )
+            hil_state = WorkflowState(message=hil_message, db_path=path, db=db)
+            hil_state.client_id = (target_event.get("event_data", {}).get("Email") or "").lower()
+            hil_state.event_entry = target_event
+            hil_state.current_step = 5
+            hil_state.user_info = {"hil_approve_step": 5, "hil_decision": "approve"}
+            hil_state.thread_state = target_event.get("thread_state")
+
+            # Set pending decision so negotiation handler can process it
+            if not target_event.get("negotiation_pending_decision"):
+                target_event["negotiation_pending_decision"] = {
+                    "type": "accept",
+                    "offer_id": target_event.get("current_offer_id"),
+                    "created_at": datetime.utcnow().isoformat() + "Z",
+                }
+
+            decision_result = negotiation_group._apply_hil_negotiation_decision(hil_state, target_event, "approve")  # type: ignore[attr-defined]
+            if not decision_result.halt and (target_event.get("current_step") == 6):
+                process_transition(hil_state)
+
+            # Set site_visit_state to "proposed" so client's date preference is handled correctly
+            target_event.setdefault("site_visit_state", {
+                "status": "idle",
+                "proposed_slots": [],
+                "confirmed_date": None,
+                "confirmed_time": None,
+            })["status"] = "proposed"
+
+            if hil_state.extras.get("persist"):
+                db_io.save_db(db, path, lock_path=lock_path)
+
     # If this approval is for a negotiation (Step 5), apply the decision so the workflow progresses.
     if step_num == 5:
         pending_decision = target_event.get("negotiation_pending_decision")
@@ -582,6 +636,15 @@ def approve_task_and_send(
             decision_result = negotiation_group._apply_hil_negotiation_decision(hil_state, target_event, "approve")  # type: ignore[attr-defined]
             if not decision_result.halt and (target_event.get("current_step") == 6):
                 process_transition(hil_state)
+
+            # Set site_visit_state to "proposed" so client's date preference is handled correctly
+            # (mirrors the Step 4 approval logic above)
+            target_event.setdefault("site_visit_state", {
+                "status": "idle",
+                "proposed_slots": [],
+                "confirmed_date": None,
+                "confirmed_time": None,
+            })["status"] = "proposed"
 
             if hil_state.extras.get("persist"):
                 db_io.save_db(db, path, lock_path=lock_path)
@@ -612,6 +675,14 @@ def approve_task_and_send(
         draft["body_markdown"] = new_body
         draft["body"] = new_body
         body_text = new_body
+        # Set site_visit_state to "proposed" so client's date preference is handled correctly
+        target_event.setdefault("site_visit_state", {
+            "status": "idle",
+            "proposed_slots": [],
+            "confirmed_date": None,
+            "confirmed_time": None,
+        })["status"] = "proposed"
+        db_io.save_db(db, path, lock_path=lock_path)
     elif note_text:
         appended = f"{body_text.rstrip()}\n\nManager note:\n{note_text}" if body_text.strip() else f"Manager note:\n{note_text}"
         body_text = appended
@@ -881,6 +952,9 @@ def process_msg(msg: Dict[str, Any], db_path: Path = DB_PATH) -> Dict[str, Any]:
         part for part in ((message.subject or "").strip(), (message.body or "").strip()) if part
     )
     state.extras["general_qna_scan"] = quick_general_qna_scan(combined_text)
+    # [DEV TEST MODE] Pass through skip_dev_choice flag for testing convenience
+    if msg.get("skip_dev_choice"):
+        state.extras["skip_dev_choice"] = True
     classification = _ensure_general_qna_classification(state, combined_text)
     _debug_state("init", state, extra={"entity": "client"})
     last_result = intake.process(state)
@@ -898,8 +972,13 @@ def process_msg(msg: Dict[str, Any], db_path: Path = DB_PATH) -> Dict[str, Any]:
             # Don't flag as duplicate if this is a detour return or offer update flow
             is_detour = state.event_entry.get("caller_step") is not None
             current_step = state.event_entry.get("current_step", 1)
+            # Don't flag as duplicate during billing flow - client may resend billing info
+            in_billing_flow = (
+                state.event_entry.get("offer_accepted")
+                and (state.event_entry.get("billing_requirements") or {}).get("awaiting_billing_for_accept")
+            )
 
-            if not is_detour and current_step >= 2:
+            if not is_detour and not in_billing_flow and current_step >= 2:
                 # Return friendly "same message" response instead of processing
                 duplicate_response = GroupResult(
                     action="duplicate_message",
@@ -946,6 +1025,19 @@ def process_msg(msg: Dict[str, Any], db_path: Path = DB_PATH) -> Dict[str, Any]:
         )
         _persist_if_needed(state, path, lock_path)
         return _flush_and_finalize(shortcut_result, state, path, lock_path)
+
+    # [BILLING FLOW CORRECTION] Force step=5 when in billing flow
+    # This handles cases where step was incorrectly set before billing flow started
+    if state.event_entry:
+        in_billing_flow = (
+            state.event_entry.get("offer_accepted")
+            and (state.event_entry.get("billing_requirements") or {}).get("awaiting_billing_for_accept")
+        )
+        stored_step = state.event_entry.get("current_step")
+        if in_billing_flow and stored_step != 5:
+            print(f"[WF][BILLING_FIX] Correcting step from {stored_step} to 5 for billing flow")
+            state.event_entry["current_step"] = 5
+            state.extras["persist"] = True
 
     for _ in range(6):
         event_entry = state.event_entry

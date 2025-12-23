@@ -1,7 +1,8 @@
 
 import pytest
 
-from backend.workflows.common.confidence import (
+# MIGRATED: from backend.workflows.common.confidence -> backend.detection.intent.confidence
+from backend.detection.intent.confidence import (
     should_seek_clarification,
     should_ignore_message,
     classify_response_action,
@@ -262,7 +263,8 @@ class TestClassifyResponseAction:
 # check_nonsense_gate Tests (Step Handler Integration)
 # ============================================================================
 
-from backend.workflows.common.confidence import (
+# MIGRATED: from backend.workflows.common.confidence -> backend.detection.intent.confidence
+from backend.detection.intent.confidence import (
     check_nonsense_gate,
     NONSENSE_IGNORE_THRESHOLD,
     NONSENSE_HIL_THRESHOLD,

@@ -15,8 +15,10 @@ import pytest
 from types import SimpleNamespace
 from typing import List
 
-from backend.llm.intent_classifier import classify_intent, _detect_qna_types
-from backend.workflows.nlu.general_qna_classifier import (
+# MIGRATED: from backend.llm.intent_classifier -> backend.detection.intent.classifier
+from backend.detection.intent.classifier import classify_intent, _detect_qna_types
+# MIGRATED: from backend.workflows.nlu.general_qna_classifier -> backend.detection.qna.general_qna
+from backend.detection.qna.general_qna import (
     detect_general_room_query,
     reset_general_qna_cache,
 )

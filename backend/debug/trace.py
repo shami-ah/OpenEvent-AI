@@ -365,6 +365,14 @@ def emit(
     except Exception:
         pass
 
+    # Also write to human-readable live log
+    try:
+        from . import live_log  # pylint: disable=import-outside-toplevel
+
+        live_log.append_log(thread_id, asdict(event))
+    except Exception:
+        pass
+
 
 def _derive_summary(
     kind: TraceKind,

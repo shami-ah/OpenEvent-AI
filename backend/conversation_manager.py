@@ -264,7 +264,7 @@ def create_offer_summary(event_info: EventInformation) -> str:
     participants = 0
     try:
         participants = int(event_info.number_of_participants)
-    except:
+    except (ValueError, TypeError):
         participants = 0
     
     catering_pref = event_info.catering_preference.lower()
@@ -570,7 +570,8 @@ def generate_response(conversation_state: ConversationState, user_message: str) 
                         suitable_rooms.append(format_room_description(room))
                 if suitable_rooms:
                     room_context = f"\n\nSUITABLE ROOMS FOR {num_people} PEOPLE:\n" + "\n".join(suitable_rooms)
-            except:
+            except (ValueError, TypeError, KeyError):
+                # Could not determine suitable rooms - continue without room context
                 pass
     
     catering_context = ""
@@ -739,7 +740,7 @@ def generate_room_response(user_msg_lower: str, event_info: EventInformation) ->
 - Best for: {', '.join(room['best_for'])}
 - Pricing: CHF {room['full_day_rate']} for a full day"""
                     suitable_rooms.append(room_details)
-            
+
             if suitable_rooms:
                 return f"""For your group of {num_people} people, here are the suitable rooms:
 
@@ -749,7 +750,8 @@ Which room would you prefer?
 
 Best regards,
 Shami (from Ares Illi's team)"""
-        except:
+        except (ValueError, TypeError, KeyError):
+            # Could not parse participants or room data - fall through to show all rooms
             pass
     
     # If no participant count, show all rooms
@@ -784,7 +786,7 @@ def create_summary(event_info: EventInformation) -> str:
     participants = 0
     try:
         participants = int(event_info.number_of_participants)
-    except:
+    except (ValueError, TypeError):
         participants = 0
     
     catering_pref = event_info.catering_preference.lower()

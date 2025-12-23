@@ -674,7 +674,8 @@ def route_multi_variable_qna(
 
     Returns None if no multi-variable Q&A detected, otherwise returns composed result.
     """
-    from backend.llm.intent_classifier import spans_multiple_steps
+    # MIGRATED: from backend.llm.intent_classifier -> backend.detection.intent.classifier
+    from backend.detection.intent.classifier import spans_multiple_steps
     from backend.workflows.qna.conjunction import analyze_conjunction
 
     secondary: List[str] = list(classification.get("secondary") or [])

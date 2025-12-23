@@ -1,4 +1,13 @@
 """
+DEPRECATED: This module has been migrated to backend/detection/special/room_conflict.py
+
+Please update your imports:
+    OLD: from backend.workflows.common.conflict import ...
+    NEW: from backend.detection.special.room_conflict import ...
+
+This file will be removed in a future release.
+---
+
 Room conflict detection and resolution for the booking workflow.
 
 Two conflict scenarios:

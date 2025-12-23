@@ -1,4 +1,5 @@
-from backend.workflows.nlu.semantic_matchers import (
+# MIGRATED: from backend.workflows.nlu.semantic_matchers -> backend.detection.response.matchers
+from backend.detection.response.matchers import (
     is_room_selection,
     matches_acceptance_pattern,
     matches_change_pattern,

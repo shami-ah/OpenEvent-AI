@@ -1,6 +1,15 @@
 from __future__ import annotations
 
 """
+DEPRECATED: This module has been migrated to backend/detection/intent/confidence.py
+
+Please update your imports:
+    OLD: from backend.workflows.common.confidence import ...
+    NEW: from backend.detection.intent.confidence import ...
+
+This file will be removed in a future release.
+---
+
 Confidence thresholds and utilities for detection confidence gating.
 
 Threshold Hierarchy (from high to low):

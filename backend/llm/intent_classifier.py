@@ -1,3 +1,13 @@
+"""
+DEPRECATED: This module has been migrated to backend/detection/intent/classifier.py
+
+Please update your imports:
+    OLD: from backend.llm.intent_classifier import ...
+    NEW: from backend.detection.intent.classifier import ...
+
+This file will be removed in a future release.
+"""
+
 from __future__ import annotations
 
 import re
@@ -5,10 +15,12 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from backend.domain.vocabulary import IntentLabel
 from backend.workflows.llm.adapter import classify_intent as agent_classify_intent
-from backend.workflows.common.confidence import has_workflow_signal, is_gibberish
+# MIGRATED: from backend.workflows.common.confidence -> backend.detection.intent.confidence
+from backend.detection.intent.confidence import has_workflow_signal, is_gibberish
 
 # Import consolidated patterns from keyword_buckets (single source of truth)
-from backend.workflows.nlu.keyword_buckets import (
+# MIGRATED: from backend.workflows.nlu.keyword_buckets -> backend.detection.keywords.buckets
+from backend.detection.keywords.buckets import (
     ACTION_REQUEST_PATTERNS,
     AVAILABILITY_TOKENS,
     RESUME_PHRASES,
