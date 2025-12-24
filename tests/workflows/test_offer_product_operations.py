@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backend.workflows.groups.offer.trigger.process import (
+from backend.workflows.steps.step4_offer.trigger.process import (
     _apply_product_operations,
     _compose_offer_summary,
 )

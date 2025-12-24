@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, validator
 
-from backend.workflows.groups.intake.condition.checks import suggest_dates
+from backend.workflows.steps.step1_intake.condition.checks import suggest_dates
 from backend.workflows.common.datetime_parse import to_iso_date
 from backend.workflow_email import process_msg as workflow_process_msg
 

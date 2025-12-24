@@ -4,15 +4,15 @@ import pytest
 
 from backend.workflows.common.requirements import requirements_hash
 from backend.workflows.common.types import IncomingMessage, WorkflowState
-from backend.workflows.groups.date_confirmation.trigger.process import (
+from backend.workflows.steps.step2_date_confirmation.trigger.process import (
     _present_candidate_dates,
     _finalize_confirmation,
 )
-from backend.workflows.groups.room_availability.trigger.process import process as room_process
-from backend.workflows.groups.offer.trigger.process import process as offer_process
+from backend.workflows.steps.step3_room_availability.trigger.process import process as room_process
+from backend.workflows.steps.step4_offer.trigger.process import process as offer_process
 import importlib
 
-room_module = importlib.import_module("backend.workflows.groups.room_availability.trigger.process")
+room_module = importlib.import_module("backend.workflows.steps.step3_room_availability.trigger.process")
 
 
 def _build_state(tmp_path: Path) -> WorkflowState:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from backend.workflows.groups.room_availability.db_pers import load_rooms_config
+from backend.workflows.steps.step3_room_availability.db_pers import load_rooms_config
 
 _STATUS_WEIGHTS = {
     "available": 2,

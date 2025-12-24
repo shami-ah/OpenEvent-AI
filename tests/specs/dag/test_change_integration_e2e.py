@@ -16,9 +16,9 @@ from typing import Any, Dict
 import pytest
 
 from backend.workflows.common.types import IncomingMessage, WorkflowState
-from backend.workflows.groups.intake.trigger import process as process_intake
-from backend.workflows.groups.date_confirmation.trigger import process as process_date
-from backend.workflows.groups.room_availability.trigger import process as process_room
+from backend.workflows.steps.step1_intake.trigger import process as process_intake
+from backend.workflows.steps.step2_date_confirmation.trigger import process as process_date
+from backend.workflows.steps.step3_room_availability.trigger import process as process_room
 
 
 @pytest.fixture

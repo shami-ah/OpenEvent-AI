@@ -1180,33 +1180,98 @@ def enrich_general_qna_step2(state: WorkflowState, classification: Dict[str, Any
     table_lines = _render_markdown_table(display_rows, column_order, select_fields)
     intro_text = _format_intro_paragraph(select_fields, effective, q_values, constants, menu_payload, state, column_order)
 
-    body_lines = [CLIENT_AVAILABILITY_HEADER]
-    if intro_text:
-        body_lines.append(intro_text)
-    if table_lines:
-        body_lines.append("")
-        body_lines.extend(table_lines)
-    body_lines.extend(["", "NEXT STEP:", next_step_line])
-    body_markdown = "\n".join(body_lines).strip()
+    # --- VERBALIZED CONTENT PRESERVATION ---
+    # Check if draft already has LLM-verbalized content (not raw table data).
+    # The verbalizer runs BEFORE this enrichment step and may have already
+    # created proper prose. We must NOT overwrite it with raw table markdown.
+    existing_body = draft.get("body_markdown", "")
 
-    # Preserve router Q&A content (catering, products, etc.) that was appended earlier
-    if draft.get("router_qna_appended"):
-        old_body_markdown = draft.get("body_markdown", "")
-        # Extract the router Q&A section (everything after "---\n\nINFO:")
-        if "\n\n---\n\nINFO:" in old_body_markdown:
-            router_section = old_body_markdown.split("\n\n---\n\nINFO:", 1)[1]
-            body_markdown = f"{body_markdown}\n\n---\n\nINFO:{router_section}"
-        elif "\n\n---\n\n" in old_body_markdown and "catering packages" in old_body_markdown.lower():
-            # Fallback: try to find catering content after separator
-            parts = old_body_markdown.rsplit("\n\n---\n\n", 1)
-            if len(parts) == 2 and "catering packages" in parts[1].lower():
-                body_markdown = f"{body_markdown}\n\n---\n\n{parts[1]}"
+    def _is_verbalized_content(text: str) -> bool:
+        """Detect if text is LLM-verbalized prose vs raw table/fallback data."""
+        if not text or len(text) < 50:
+            return False
+        text_lower = text.lower()
+        # Verbalized prose typically contains conversational phrases
+        verbalized_markers = [
+            "i'd be happy to",
+            "i would be happy to",
+            "let me check",
+            "here's what i found",
+            "based on your",
+            "for your event",
+            "i can confirm",
+            "good news",
+            "i've checked",
+            "looking at",
+            "regarding your",
+            "thank you for",
+            "happy to help",
+            "pleased to",
+        ]
+        # Raw table markers indicate non-verbalized content
+        raw_table_markers = [
+            "status: available",
+            "status: option",
+            "status: confirmed",
+            "capacity up to",
+            "| status:",
+            "| capacity:",
+            "room |",
+            "| room",
+            "dates |",
+            "| dates",
+        ]
+        has_verbalized = any(marker in text_lower for marker in verbalized_markers)
+        has_raw_table = any(marker in text_lower for marker in raw_table_markers)
+        # If it has verbalized markers and no raw table markers, it's verbalized
+        return has_verbalized and not has_raw_table
 
-    footer_text = "Step: 2 Date Confirmation · Next: Room Availability · State: Awaiting Client"
-    draft["body_markdown"] = body_markdown
-    draft["body"] = f"{body_markdown}\n\n---\n{footer_text}"
-    draft["footer"] = footer_text
-    draft["headers"] = [CLIENT_AVAILABILITY_HEADER]
+    # Preserve verbalized content - don't overwrite with raw tables
+    if _is_verbalized_content(existing_body):
+        # Keep the verbalized content, just ensure table_blocks are set for frontend
+        trace_general_qa_status(
+            thread_id,
+            "preserved_verbalized",
+            {
+                "topic": draft.get("topic"),
+                "body_preview": existing_body[:100],
+                "had_table_lines": bool(table_lines),
+            },
+        )
+        # Still set table_blocks for structured frontend rendering
+        footer_text = "Step: 2 Date Confirmation · Next: Room Availability · State: Awaiting Client"
+        draft["footer"] = footer_text
+        draft["headers"] = [CLIENT_AVAILABILITY_HEADER]
+        # Fall through to set table_blocks below without overwriting body_markdown
+    else:
+        # No verbalized content - build raw table response
+        body_lines = [CLIENT_AVAILABILITY_HEADER]
+        if intro_text:
+            body_lines.append(intro_text)
+        if table_lines:
+            body_lines.append("")
+            body_lines.extend(table_lines)
+        body_lines.extend(["", "NEXT STEP:", next_step_line])
+        body_markdown = "\n".join(body_lines).strip()
+
+        # Preserve router Q&A content (catering, products, etc.) that was appended earlier
+        if draft.get("router_qna_appended"):
+            old_body_markdown = draft.get("body_markdown", "")
+            # Extract the router Q&A section (everything after "---\n\nINFO:")
+            if "\n\n---\n\nINFO:" in old_body_markdown:
+                router_section = old_body_markdown.split("\n\n---\n\nINFO:", 1)[1]
+                body_markdown = f"{body_markdown}\n\n---\n\nINFO:{router_section}"
+            elif "\n\n---\n\n" in old_body_markdown and "catering packages" in old_body_markdown.lower():
+                # Fallback: try to find catering content after separator
+                parts = old_body_markdown.rsplit("\n\n---\n\n", 1)
+                if len(parts) == 2 and "catering packages" in parts[1].lower():
+                    body_markdown = f"{body_markdown}\n\n---\n\n{parts[1]}"
+
+        footer_text = "Step: 2 Date Confirmation · Next: Room Availability · State: Awaiting Client"
+        draft["body_markdown"] = body_markdown
+        draft["body"] = f"{body_markdown}\n\n---\n{footer_text}"
+        draft["footer"] = footer_text
+        draft["headers"] = [CLIENT_AVAILABILITY_HEADER]
 
     columns_meta = [
         {

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from backend.debug.trace import BUS
 from backend.workflows.common.types import IncomingMessage, WorkflowState
-from backend.workflows.groups.date_confirmation.trigger.process import _present_candidate_dates
+from backend.workflows.steps.step2_date_confirmation.trigger.process import _present_candidate_dates
 
 
 

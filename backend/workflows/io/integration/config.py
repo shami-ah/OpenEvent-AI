@@ -125,10 +125,56 @@ def reload_config() -> None:
     INTEGRATION_CONFIG = IntegrationConfig.from_env()
 
 
+def _get_hil_setting_from_db() -> Optional[bool]:
+    """Check database for HIL mode setting (allows runtime toggle).
+
+    Returns None if not set in database, otherwise the boolean value.
+    """
+    try:
+        # Import here to avoid circular dependency
+        from backend.workflow_email import load_db as wf_load_db
+        db = wf_load_db()
+        hil_config = db.get("config", {}).get("hil_mode", {})
+        if "enabled" in hil_config:
+            return hil_config["enabled"]
+    except Exception as exc:
+        # Database not available or error - fall back to env var
+        print(f"[Config][WARN] Could not read HIL setting from DB: {exc}")
+    return None
+
+
+# Cache for HIL setting to avoid repeated DB reads
+_hil_setting_cache: Optional[bool] = None
+
+
+def refresh_hil_setting() -> None:
+    """Refresh HIL setting from database. Call after POST /api/config/hil-mode."""
+    global _hil_setting_cache
+    _hil_setting_cache = _get_hil_setting_from_db()
+
+
 def is_hil_all_replies_enabled() -> bool:
     """Check if HIL approval is required for all AI replies.
+
+    Priority order:
+    1. Database setting (if set) - allows runtime toggle via API
+    2. Environment variable OE_HIL_ALL_LLM_REPLIES - server default
+    3. False - backwards compatible default
 
     When True: ALL AI-generated outbound replies go to "AI Reply Approval" queue
     When False: Current behavior (only specific actions require HIL approval)
     """
+    global _hil_setting_cache
+
+    # Check cache first (set by refresh_hil_setting after API calls)
+    if _hil_setting_cache is not None:
+        return _hil_setting_cache
+
+    # Check database (first call or cache invalidated)
+    db_setting = _get_hil_setting_from_db()
+    if db_setting is not None:
+        _hil_setting_cache = db_setting
+        return db_setting
+
+    # Fall back to environment variable / config
     return INTEGRATION_CONFIG.hil_all_llm_replies

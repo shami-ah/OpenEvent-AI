@@ -9,10 +9,10 @@ from fastapi.testclient import TestClient
 from backend.domain import IntentLabel
 from backend.workflows.common.requirements import requirements_hash
 from backend.workflows.common.types import IncomingMessage, WorkflowState
-from backend.workflows.groups import intake
-from backend.workflows.groups.date_confirmation.trigger import process as date_process
-from backend.workflows.groups.offer.trigger.process import process as offer_process
-from backend.workflows.groups.room_availability.trigger import process as room_process
+from backend.workflows.steps import step1_intake as intake
+from backend.workflows.steps.step2_date_confirmation.trigger import process as date_process
+from backend.workflows.steps.step4_offer.trigger.process import process as offer_process
+from backend.workflows.steps.step3_room_availability.trigger import process as room_process
 from backend.debug.lifecycle import close_if_ended
 
 

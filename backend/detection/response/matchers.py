@@ -75,12 +75,22 @@ ACCEPTANCE_PATTERNS = [
     r"\b(accept|agree|approved?|confirm)\w*\b",
     r"\b(looks?|sounds?|all|good\s+to)\s+(good|great|fine|okay|ok)\b",
     r"\b(yes|ok|okay|sure|yep|ja|oui)[\s,]*(please|send|go|proceed|do\s+it)?\b",
-    r"\b(that'?s?|i'?m?|all)?\s+fine\b",
+    r"\b(?:that'?s?|i'?m?|all)?\s*fine\b",  # "fine", "that's fine", "all fine"
+    r"\ball\s+good\b",  # "all good" standalone
     r"\b(send\s+it|go\s+ahead|proceed|let'?s?\s+(do|go|proceed))\b",
     r"\b(works?\s+for|happy\s+with|satisfied)\b",
     r"\b(d'?accord|einverstanden|va\s+bene)\b",
     r"\b(gerne|sehr\s+gut|perfekt|perfetto|perfecto|vale|claro|muy\s+bien)\b",
+    r"\b(good|great)\b",  # standalone "good", "great"
+    r"\bgut\b",  # German standalone "gut"
 ]
+
+# Negation words that invalidate acceptance signals
+NEGATION_PATTERN = re.compile(
+    r"\b(not|no|n't|don't|doesn't|didn't|isn't|wasn't|aren't|weren't|won't|"
+    r"wouldn't|couldn't|shouldn't|never|neither|ohne|nicht|kein|non|pas|jamais)\b",
+    re.IGNORECASE
+)
 
 DECLINE_PATTERNS = [
     r"\b(no|nope|nah)\b",
@@ -200,6 +210,9 @@ def matches_acceptance_pattern(text: str) -> Tuple[bool, float, str]:
         (is_match, confidence, matched_pattern)
     """
     if _is_question(text) or is_room_selection(text):
+        return False, 0.0, ""
+    # Reject if text contains negation words (e.g., "not good", "doesn't look good")
+    if NEGATION_PATTERN.search(text or ""):
         return False, 0.0, ""
     return _match_patterns(text, ACCEPTANCE_PATTERNS)
 

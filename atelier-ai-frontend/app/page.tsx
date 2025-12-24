@@ -875,13 +875,22 @@ function EmailThreadUIContent() {
     async (eventId: string, depositAmount: number) => {
       setDepositPayingFor(eventId);
       try {
-        await requestJSON(`${API_BASE}/event/deposit/pay`, {
+        const result = await requestJSON<{
+          status: string;
+          response?: string;
+          workflow_action?: string;
+        }>(`${API_BASE}/event/deposit/pay`, {
           method: 'POST',
           body: JSON.stringify({ event_id: eventId }),
         });
         // Refresh tasks and update session deposit info to hide the button
         await refreshTasks();
         setSessionDepositInfo((prev) => prev ? { ...prev, deposit_paid: true } : null);
+
+        // NOTE: Don't append the response to chat here - the HIL task should appear
+        // in the Tasks panel for manager approval. The message will be sent to chat
+        // only after the manager approves the task.
+
         alert(
           `Deposit of CHF ${depositAmount.toLocaleString('de-CH', {
             minimumFractionDigits: 2,

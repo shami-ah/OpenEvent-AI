@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Dict, Any, List, Optional
 
 from backend.workflows.common.menu_options import DINNER_MENU_OPTIONS
-from backend.workflows.groups.room_availability.db_pers import load_rooms_config
+from backend.workflows.steps.step3_room_availability.db_pers import load_rooms_config
 
 
 def get_rooms_for_display(date: Optional[str] = None, capacity: Optional[int] = None) -> List[Dict[str, Any]]:

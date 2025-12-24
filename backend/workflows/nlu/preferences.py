@@ -93,6 +93,7 @@ def extract_preferences(user_info: Dict[str, Any], raw_text: Optional[str] = Non
             preferences["room_match_breakdown"] = {
                 entry["room"]: {
                     "matched": entry["matched"],
+                    "closest": entry.get("closest", []),
                     "missing": entry["missing"],
                     "matches_detail": entry.get("matches_detail", []),
                     "alternatives": entry.get("alternatives", []),
@@ -206,19 +207,44 @@ def _tokenize(text: str) -> List[str]:
 
 def _score_rooms_by_products(wish_products: Sequence[str]) -> List[Dict[str, Any]]:
     catalog = _room_catalog()
+    rooms_data = {room["name"]: room for room in _load_rooms()}
     recommendations: List[Dict[str, Any]] = []
 
     for room, data in catalog.items():
         phrases = data["phrases"]
         variants_map = data.get("product_variants") or {}
+        # Get room's native features, services, and layout types for direct matching
+        room_info = rooms_data.get(room, {})
+        room_features = set(_normalise_phrase(f) for f in (room_info.get("features") or []))
+        room_services = set(_normalise_phrase(s) for s in (room_info.get("services") or []))
+        # Include layout types (workshop, theatre, u_shape, etc.) as matchable features
+        room_layouts = set(_normalise_phrase(k) for k in (room_info.get("capacity_by_layout") or {}).keys())
+        room_all_features = room_features | room_services | room_layouts
+
         score = 0.0
-        matched: List[str] = []
+        matched: List[str] = []  # Strong matches (>= 0.85)
+        closest: List[str] = []  # Moderate matches (0.65-0.85) - "comes closest to your X"
         missing: List[str] = []
         matches_detail: List[Dict[str, Any]] = []
         alternatives_detail: List[Dict[str, Any]] = []
         matched_lower: Set[str] = set()
+        closest_lower: Set[str] = set()
         alternatives_seen: Set[Tuple[str, str]] = set()
         for wish in wish_products:
+            wish_normalized = _normalise_phrase(wish)
+
+            # First, check direct match against room features/services
+            feature_match = _match_against_features(wish_normalized, room_all_features)
+            if feature_match:
+                score += 1.0
+                feature_label = wish.title()
+                if feature_label.lower() not in matched_lower:
+                    matched.append(feature_label)
+                    matched_lower.add(feature_label.lower())
+                matches_detail.append(_make_match_entry(wish, feature_label, 1.0))
+                continue
+
+            # Then check product catalog matches
             top_matches = _top_product_matches(wish, variants_map)
             if not top_matches:
                 ratio, label = _best_phrase_match(wish, phrases)
@@ -234,16 +260,18 @@ def _score_rooms_by_products(wish_products: Sequence[str]) -> List[Dict[str, Any
 
             best_ratio, best_product = top_matches[0]
             if best_ratio >= 0.85:
+                # Strong match - "includes the X you mentioned"
                 score += 1.0
                 if best_product.lower() not in matched_lower:
                     matched.append(best_product)
                     matched_lower.add(best_product.lower())
                 matches_detail.append(_make_match_entry(wish, best_product, best_ratio))
             elif best_ratio >= 0.65:
+                # Moderate match - "X comes closest to your Y preference"
                 score += 0.5
-                if best_product.lower() not in matched_lower:
-                    matched.append(best_product)
-                    matched_lower.add(best_product.lower())
+                if best_product.lower() not in closest_lower:
+                    closest.append(f"{best_product} (closest to {wish})")
+                    closest_lower.add(best_product.lower())
                 matches_detail.append(_make_match_entry(wish, best_product, best_ratio))
             elif best_ratio >= 0.5:
                 missing.append(wish)
@@ -268,6 +296,7 @@ def _score_rooms_by_products(wish_products: Sequence[str]) -> List[Dict[str, Any
                 "room": room,
                 "score": round(score, 3),
                 "matched": matched,
+                "closest": closest,  # Moderate matches with context
                 "missing": missing,
                 "matches_detail": matches_detail,
                 "alternatives": alternatives_detail,
@@ -276,6 +305,27 @@ def _score_rooms_by_products(wish_products: Sequence[str]) -> List[Dict[str, Any
 
     recommendations.sort(key=lambda entry: (-entry["score"], entry["room"]))
     return recommendations[:5]
+
+
+def _match_against_features(wish_normalized: str, features: Set[str]) -> bool:
+    """Check if a wish matches any room feature using fuzzy matching."""
+    if not wish_normalized or not features:
+        return False
+    # Direct containment check
+    for feature in features:
+        if wish_normalized in feature or feature in wish_normalized:
+            return True
+        # Handle common variations: "sound system" vs "sound_system"
+        wish_no_space = wish_normalized.replace(" ", "")
+        feature_no_space = feature.replace(" ", "")
+        if wish_no_space in feature_no_space or feature_no_space in wish_no_space:
+            return True
+    # Fuzzy match for close variations
+    for feature in features:
+        ratio = difflib.SequenceMatcher(a=wish_normalized, b=feature).ratio()
+        if ratio >= 0.8:
+            return True
+    return False
 
 
 def _best_phrase_match(needle: str, phrases: Dict[str, str]) -> Tuple[float, Optional[str]]:
@@ -346,14 +396,20 @@ def _normalise_phrase(value: str) -> str:
 @lru_cache(maxsize=1)
 def _room_catalog() -> Dict[str, Dict[str, Any]]:
     rooms = _load_rooms()
-    room_products = {
-        room["name"]: {
+    room_products = {}
+    for room in rooms:
+        # Collect all matchable features: features + services + layout types
+        features = list(room.get("features") or [])
+        features.extend(room.get("services") or [])
+        # Include capacity_by_layout keys (e.g., "workshop", "theatre", "u_shape")
+        # These are valid room capabilities that clients may request
+        layout_keys = list((room.get("capacity_by_layout") or {}).keys())
+        features.extend(layout_keys)
+        room_products[room["name"]] = {
             "phrases": {},
-            "features": room.get("features") or [],
+            "features": features,
             "product_variants": {},
         }
-        for room in rooms
-    }
     room_ids = {room.get("id", "").strip().lower(): room["name"] for room in rooms if room.get("id")}
     room_aliases = {room["name"].strip().lower(): room["name"] for room in rooms}
     product_records = list_product_records()

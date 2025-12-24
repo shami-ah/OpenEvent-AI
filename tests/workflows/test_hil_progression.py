@@ -3,7 +3,7 @@ from pathlib import Path
 from backend import workflow_email as wf
 from backend.domain import IntentLabel
 from backend.workflows.common.types import IncomingMessage, WorkflowState
-from backend.workflows.groups import negotiation_close
+from backend.workflows.steps import step5_negotiation as negotiation_close
 
 
 def _build_state(tmp_path: Path) -> WorkflowState:

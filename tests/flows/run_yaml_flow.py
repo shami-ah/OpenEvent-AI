@@ -210,7 +210,7 @@ class FlowHarness:
         raise AssertionError(f"Unknown system_call {name}")
 
     def _build_offer(self, event: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
-        from backend.workflows.groups.offer.trigger.process import build_offer
+        from backend.workflows.steps.step4_offer.trigger.process import build_offer
 
         result = build_offer(
             event.get("event_id"),

@@ -109,7 +109,7 @@ for root, _, files in os.walk("backend/workflows/groups"):
 print("DIRECT_DB_WRITES_IN_GROUPS", bad)
 
 print("== availability toggle ==")
-from backend.workflows.groups.room_availability.trigger import evaluate_room_statuses  # noqa: E402
+from backend.workflows.steps.step3_room_availability.trigger import evaluate_room_statuses  # noqa: E402
 
 db = {
     "events": [

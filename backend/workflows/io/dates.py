@@ -8,7 +8,7 @@ try:  # Python >= 3.9
 except ImportError:  # pragma: no cover
     ZoneInfo = None  # type: ignore[misc,assignment]
 
-from backend.workflows.groups.intake.condition.checks import blackout_days
+from backend.workflows.steps.step1_intake.condition.checks import blackout_days
 
 
 DEFAULT_TIMEZONE = "Europe/Zurich"

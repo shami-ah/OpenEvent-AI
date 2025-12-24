@@ -6,8 +6,8 @@ from pathlib import Path
 from backend.workflows.common.requirements import requirements_hash
 from backend.workflows.common.types import IncomingMessage, WorkflowState
 
-room_module = importlib.import_module("backend.workflows.groups.room_availability.trigger.process")
-from backend.workflows.groups.room_availability.trigger.process import process as room_process
+room_module = importlib.import_module("backend.workflows.steps.step3_room_availability.trigger.process")
+from backend.workflows.steps.step3_room_availability.trigger.process import process as room_process
 
 
 def _state(tmp_path: Path) -> WorkflowState:

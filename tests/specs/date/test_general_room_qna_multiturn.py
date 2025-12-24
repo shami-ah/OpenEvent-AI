@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from backend.workflows.common.types import IncomingMessage, WorkflowState
-from backend.workflows.groups.date_confirmation.trigger.process import process
+from backend.workflows.steps.step2_date_confirmation.trigger.process import process
 
 
 def _create_state(tmp_path: Path, message_body: str, msg_id: str = "msg-1", ts: str = "2025-11-05T10:00:00Z") -> WorkflowState:

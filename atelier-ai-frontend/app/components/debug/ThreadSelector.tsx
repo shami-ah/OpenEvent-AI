@@ -10,7 +10,7 @@ interface ThreadSelectorProps {
 
 function LinkIcon() {
   return (
-    <svg style={{ width: '16px', height: '16px' }} className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
     </svg>
   );
@@ -18,7 +18,7 @@ function LinkIcon() {
 
 function CheckIcon() {
   return (
-    <svg style={{ width: '14px', height: '14px' }} className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
     </svg>
   );
@@ -93,58 +93,30 @@ export default function ThreadSelector({ onThreadChange, className = '' }: Threa
   }, [manualId, onThreadChange, router, searchParams]);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }} className={className}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b' }}>
+    <div className={`flex items-center gap-3.5 ${className}`}>
+      <div className="flex items-center gap-2 text-slate-500">
         <LinkIcon />
-        <span style={{ fontSize: '14px', fontWeight: '500' }}>Thread</span>
+        <span className="text-sm font-medium">Thread</span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
+      <div className="flex items-center">
         <input
           value={manualId}
           onChange={(event) => setManualId(event.target.value)}
           placeholder="Enter thread ID..."
-          style={{
-            backgroundColor: 'rgba(30,41,59,0.5)',
-            border: '1px solid #334155',
-            borderRadius: '10px 0 0 10px',
-            padding: '10px 16px',
-            fontSize: '14px',
-            color: '#f1f5f9',
-            minWidth: '200px',
-            outline: 'none'
-          }}
+          className="bg-slate-800/50 border border-slate-700 rounded-l-xl px-4 py-2.5 text-sm text-slate-100 min-w-[200px] outline-none focus:border-purple-500/50 focus:bg-slate-800 transition-all placeholder:text-slate-600"
         />
         <button
           type="button"
           onClick={handleAttach}
-          style={{
-            padding: '10px 16px',
-            fontSize: '14px',
-            fontWeight: '500',
-            backgroundColor: 'rgba(139,92,246,0.2)',
-            border: '1px solid rgba(139,92,246,0.3)',
-            borderLeft: 'none',
-            borderRadius: '0 10px 10px 0',
-            color: '#a78bfa',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}
+          className="px-4 py-2.5 text-sm font-medium bg-purple-500/10 border border-purple-500/30 border-l-0 rounded-r-xl text-purple-400 hover:bg-purple-500/20 transition-all"
         >
           Attach
         </button>
       </div>
       {threadId && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '6px 12px',
-          borderRadius: '8px',
-          backgroundColor: 'rgba(34,197,94,0.1)',
-          border: '1px solid rgba(34,197,94,0.3)'
-        }}>
-          <span style={{ color: '#4ade80' }}><CheckIcon /></span>
-          <span style={{ fontSize: '13px', fontWeight: '500', color: '#4ade80' }}>Connected</span>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400">
+          <CheckIcon />
+          <span className="text-xs font-medium">Connected</span>
         </div>
       )}
     </div>

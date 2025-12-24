@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import StepFilter, { useStepFilter } from './StepFilter';
+import StepFilter, { useStepFilter, STEP_NAMES } from './StepFilter';
 
 interface DetectionEvent {
   id: string;
@@ -40,6 +40,15 @@ interface RawTraceEvent {
 function extractStepNumber(step: string): number | null {
   const match = step.match(/step[_\s]?(\d+)/i);
   return match ? parseInt(match[1], 10) : null;
+}
+
+function formatStepName(step: string): string {
+  const num = extractStepNumber(step);
+  if (num !== null) {
+    const name = STEP_NAMES[num];
+    return name ? `Step ${num}: ${name}` : `Step ${num}`;
+  }
+  return step || '-';
 }
 
 const STAGE_COLORS = {
@@ -168,46 +177,36 @@ export default function DetectionView({ threadId, pollMs = 2000 }: DetectionView
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="flex flex-col gap-6">
       <StepFilter availableSteps={availableSteps} />
 
       {/* Stats Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>Stage:</span>
+      <div className="flex items-center gap-6 flex-wrap">
+        <div className="flex items-center gap-2.5">
+          <span className="text-sm text-slate-500 font-medium">Stage:</span>
           {Object.entries(stats.byStage).map(([stage, count]) => count > 0 && (
             <span
               key={stage}
-              style={{
-                fontSize: '13px',
-                padding: '4px 10px',
-                borderRadius: '8px',
-                backgroundColor: STAGE_COLORS[stage as keyof typeof STAGE_COLORS].bg.includes('blue') ? 'rgba(59,130,246,0.2)' :
-                                STAGE_COLORS[stage as keyof typeof STAGE_COLORS].bg.includes('purple') ? 'rgba(168,85,247,0.2)' :
-                                STAGE_COLORS[stage as keyof typeof STAGE_COLORS].bg.includes('green') ? 'rgba(34,197,94,0.2)' : 'rgba(100,116,139,0.2)',
-                color: stage === 'regex' ? '#60a5fa' : stage === 'ner' ? '#c084fc' : stage === 'llm' ? '#4ade80' : '#94a3b8',
-                fontWeight: '500'
-              }}
+              className={`
+                text-sm px-2.5 py-1 rounded-lg font-medium
+                ${STAGE_COLORS[stage as keyof typeof STAGE_COLORS].bg.replace('/20', '/30')}
+                ${STAGE_COLORS[stage as keyof typeof STAGE_COLORS].text}
+              `}
             >
               {STAGE_COLORS[stage as keyof typeof STAGE_COLORS].label}: {count}
             </span>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>Type:</span>
+        <div className="flex items-center gap-2.5">
+          <span className="text-sm text-slate-500 font-medium">Type:</span>
           {Object.entries(stats.byType).map(([type, count]) => count > 0 && (
             <span
               key={type}
-              style={{
-                fontSize: '13px',
-                padding: '4px 10px',
-                borderRadius: '8px',
-                backgroundColor: type === 'intent' ? 'rgba(249,115,22,0.2)' :
-                                type === 'entity' ? 'rgba(6,182,212,0.2)' :
-                                type === 'confirmation' ? 'rgba(234,179,8,0.2)' : 'rgba(100,116,139,0.2)',
-                color: type === 'intent' ? '#fb923c' : type === 'entity' ? '#22d3ee' : type === 'confirmation' ? '#facc15' : '#94a3b8',
-                fontWeight: '500'
-              }}
+              className={`
+                text-sm px-2.5 py-1 rounded-lg font-medium capitalize
+                ${TYPE_COLORS[type as keyof typeof TYPE_COLORS].bg.replace('/20', '/30')}
+                ${TYPE_COLORS[type as keyof typeof TYPE_COLORS].text}
+              `}
             >
               {type}: {count}
             </span>
@@ -216,40 +215,30 @@ export default function DetectionView({ threadId, pollMs = 2000 }: DetectionView
       </div>
 
       {/* View Toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-        <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#e2e8f0', margin: 0 }}>Detection Pipeline</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '14px', color: '#94a3b8' }}>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <h2 className="text-xl font-semibold text-slate-200 m-0">Detection Pipeline</h2>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-slate-400">
             {selectedStep !== null ? `${filteredEvents.length} of ${events.length}` : filteredEvents.length} events
           </span>
-          <div style={{ display: 'flex', backgroundColor: '#1e293b', borderRadius: '10px', overflow: 'hidden', border: '1px solid #334155' }}>
+          <div className="flex bg-slate-900 rounded-lg overflow-hidden border border-slate-700">
             <button
               type="button"
               onClick={() => setViewMode('timeline')}
-              style={{
-                padding: '8px 16px',
-                fontSize: '14px',
-                fontWeight: '500',
-                border: 'none',
-                cursor: 'pointer',
-                backgroundColor: viewMode === 'timeline' ? '#334155' : 'transparent',
-                color: viewMode === 'timeline' ? '#f1f5f9' : '#94a3b8'
-              }}
+              className={`
+                px-4 py-2 text-sm font-medium transition-colors
+                ${viewMode === 'timeline' ? 'bg-slate-700 text-white' : 'bg-transparent text-slate-400 hover:text-slate-300 hover:bg-slate-800'}
+              `}
             >
               Timeline
             </button>
             <button
               type="button"
               onClick={() => setViewMode('summary')}
-              style={{
-                padding: '8px 16px',
-                fontSize: '14px',
-                fontWeight: '500',
-                border: 'none',
-                cursor: 'pointer',
-                backgroundColor: viewMode === 'summary' ? '#334155' : 'transparent',
-                color: viewMode === 'summary' ? '#f1f5f9' : '#94a3b8'
-              }}
+              className={`
+                px-4 py-2 text-sm font-medium transition-colors
+                ${viewMode === 'summary' ? 'bg-slate-700 text-white' : 'bg-transparent text-slate-400 hover:text-slate-300 hover:bg-slate-800'}
+              `}
             >
               By Field
             </button>
@@ -258,8 +247,12 @@ export default function DetectionView({ threadId, pollMs = 2000 }: DetectionView
       </div>
 
       {events.length === 0 && !loading ? (
-        <div style={{ padding: '48px', textAlign: 'center', color: '#94a3b8', fontSize: '15px' }}>
+        <div className="p-12 text-center text-slate-400 text-sm">
           No detection events recorded yet.
+        </div>
+      ) : filteredEvents.length === 0 && selectedStep !== null ? (
+        <div className="p-12 text-center text-slate-400 text-sm bg-slate-800/20 border border-dashed border-slate-700 rounded-xl">
+          No detection events found for Step {selectedStep}: {STEP_NAMES[selectedStep]}.
         </div>
       ) : viewMode === 'summary' ? (
         /* Summary View - Grouped by Field */
@@ -272,14 +265,14 @@ export default function DetectionView({ threadId, pollMs = 2000 }: DetectionView
               </div>
               <div className="space-y-2">
                 {fieldEvents.map((event) => (
-                  <div key={event.id} className="flex items-center gap-3 text-sm">
-                    <span className="text-xs text-slate-500 font-mono w-16">{formatTime(event.ts)}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${STAGE_COLORS[event.detection_stage].bg} ${STAGE_COLORS[event.detection_stage].text}`}>
+                  <div key={event.id} className="grid grid-cols-[80px_60px_1fr_60px] gap-4 text-sm items-center">
+                    <span className="text-xs text-slate-500 font-mono">{formatTime(event.ts)}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded text-center ${STAGE_COLORS[event.detection_stage].bg} ${STAGE_COLORS[event.detection_stage].text}`}>
                       {STAGE_COLORS[event.detection_stage].label}
                     </span>
-                    <span className="text-slate-300 truncate flex-1">{event.extracted_value || '(none)'}</span>
+                    <span className="text-slate-300 truncate">{event.extracted_value || '(none)'}</span>
                     {event.confidence !== undefined && (
-                      <span className={`text-xs ${event.confidence > 0.7 ? 'text-green-400' : event.confidence > 0.4 ? 'text-yellow-400' : 'text-red-400'}`}>
+                      <span className={`text-xs text-right ${event.confidence > 0.7 ? 'text-green-400' : event.confidence > 0.4 ? 'text-yellow-400' : 'text-red-400'}`}>
                         {(event.confidence * 100).toFixed(0)}%
                       </span>
                     )}
@@ -291,7 +284,18 @@ export default function DetectionView({ threadId, pollMs = 2000 }: DetectionView
         </div>
       ) : (
         /* Timeline View */
-        <div className="space-y-2">
+        <div className="space-y-0">
+          {/* Header */}
+          <div className="grid grid-cols-[80px_100px_80px_100px_1fr_120px_40px] gap-4 px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-700/50">
+            <div>Time</div>
+            <div>Step</div>
+            <div>Stage</div>
+            <div>Type</div>
+            <div>Field</div>
+            <div>Value</div>
+            <div></div>
+          </div>
+          
           {filteredEvents.map((event) => {
             const stepNum = extractStepNumber(event.step);
             const isExpanded = expandedIds.has(event.id);
@@ -302,105 +306,133 @@ export default function DetectionView({ threadId, pollMs = 2000 }: DetectionView
               <div
                 key={event.id}
                 id={stepNum !== null ? `step-${stepNum}` : undefined}
-                className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden"
+                className="bg-slate-800/30 border-b border-slate-700/50 hover:bg-slate-800/60 transition-colors"
               >
-                <button
-                  type="button"
+                <div
                   onClick={() => toggleExpanded(event.id)}
-                  className="w-full px-4 py-2 flex items-center gap-3 text-left hover:bg-slate-800/80 transition-colors"
+                  className="grid grid-cols-[80px_100px_80px_100px_1fr_120px_40px] gap-4 px-4 py-3 items-center cursor-pointer"
                 >
-                  <span className="text-xs text-slate-500 font-mono w-16 flex-shrink-0">
+                  <span className="text-xs text-slate-500 font-mono">
                     {formatTime(event.ts)}
                   </span>
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">
-                    {event.step}
-                  </span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${stageColor.bg} ${stageColor.text}`}>
-                    {stageColor.label}
-                  </span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${typeColor.bg} ${typeColor.text}`}>
-                    {event.detection_type}
-                  </span>
-                  <span className="text-xs text-slate-400 w-24 flex-shrink-0 truncate">
+                  
+                  <div>
+                    <span className="text-xs px-2 py-0.5 rounded bg-slate-700/50 text-slate-300 border border-slate-600/30 whitespace-nowrap">
+                      {formatStepName(event.step)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className={`text-xs px-2 py-0.5 rounded border ${stageColor.bg} ${stageColor.text} border-opacity-20`}>
+                      {stageColor.label}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className={`text-xs px-2 py-0.5 rounded border ${typeColor.bg} ${typeColor.text} border-opacity-20 capitalize`}>
+                      {event.detection_type}
+                    </span>
+                  </div>
+
+                  <span className="text-sm font-medium text-slate-400 truncate" title={event.field_name}>
                     {event.field_name}
                   </span>
-                  <span className="flex-1 text-sm text-slate-200 truncate">
+
+                  <span className="text-sm text-slate-200 truncate font-mono" title={event.extracted_value}>
                     {event.extracted_value || '(none)'}
                   </span>
-                  {event.confidence !== undefined && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${
-                      event.confidence > 0.7 ? 'bg-green-500/20 text-green-400' :
-                      event.confidence > 0.4 ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-red-500/20 text-red-400'
-                    }`}>
-                      {(event.confidence * 100).toFixed(0)}%
-                    </span>
-                  )}
-                  <span className="text-slate-500 text-sm">{isExpanded ? '\u25B2' : '\u25BC'}</span>
-                </button>
+
+                  <span className="text-slate-500 text-xs text-right">
+                    {isExpanded ? 'Hide' : 'Show'}
+                  </span>
+                </div>
 
                 {isExpanded && (
-                  <div className="px-4 pb-4 pt-2 border-t border-slate-700 space-y-3">
-                    {/* Input that triggered detection */}
-                    {event.raw_input && (
-                      <div>
-                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
-                          Input Text
-                        </div>
-                        <div className="text-sm text-slate-300 bg-slate-900/50 p-2 rounded font-mono whitespace-pre-wrap max-h-32 overflow-auto">
-                          {event.raw_input}
+                  <div className="px-4 pb-4 pt-2 bg-slate-900/30 border-t border-slate-700/50 space-y-4 ml-[80px]">
+                    <div className="grid grid-cols-2 gap-8">
+                      {/* Left Col */}
+                      <div className="space-y-4">
+                        {/* Input that triggered detection */}
+                        {event.raw_input && (
+                          <div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1.5">
+                              Input Text
+                            </div>
+                            <div className="text-sm text-slate-300 bg-slate-950 p-3 rounded-md font-mono whitespace-pre-wrap max-h-32 overflow-auto border border-slate-800">
+                              {event.raw_input}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Extracted value */}
+                        <div>
+                          <div className="text-xs text-slate-500 uppercase tracking-wider mb-1.5">
+                            Extracted Value
+                          </div>
+                          <div className="text-sm font-medium text-blue-400 bg-slate-950 p-2 rounded border border-slate-800 font-mono">
+                            {event.extracted_value || '(none)'}
+                          </div>
                         </div>
                       </div>
-                    )}
 
-                    {/* Patterns checked (for regex stage) */}
-                    {event.patterns_matched && event.patterns_matched.length > 0 && (
-                      <div>
-                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
-                          Patterns Matched
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {event.patterns_matched.map((p, i) => (
-                            <span key={i} className="text-xs px-2 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">
-                              {p}
+                      {/* Right Col */}
+                      <div className="space-y-4">
+                         {/* Confidence */}
+                         {event.confidence !== undefined && (
+                          <div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1.5">
+                              Confidence
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded font-medium ${
+                              event.confidence > 0.7 ? 'bg-green-500/20 text-green-400' :
+                              event.confidence > 0.4 ? 'bg-yellow-500/20 text-yellow-400' :
+                              'bg-red-500/20 text-red-400'
+                            }`}>
+                              {(event.confidence * 100).toFixed(1)}%
                             </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                          </div>
+                        )}
 
-                    {/* Extracted value */}
-                    <div>
-                      <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
-                        Extracted Value
-                      </div>
-                      <div className="text-sm font-medium text-blue-400">
-                        {event.extracted_value || '(none)'}
+                        {/* Patterns checked (for regex stage) */}
+                        {event.patterns_matched && event.patterns_matched.length > 0 && (
+                          <div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1.5">
+                              Patterns Matched
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {event.patterns_matched.map((p, i) => (
+                                <span key={i} className="text-xs px-2 py-1 rounded bg-green-500/10 text-green-400 border border-green-500/20 font-mono">
+                                  {p}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Alternatives */}
+                        {event.alternatives && event.alternatives.length > 0 && (
+                          <div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1.5">
+                              Alternatives Considered
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {event.alternatives.map((alt, i) => (
+                                <span key={i} className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                                  {alt}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Error if any */}
+                        {event.error && (
+                          <div className="text-xs text-red-400 bg-red-500/10 p-3 rounded border border-red-500/20">
+                            Error: {event.error}
+                          </div>
+                        )}
                       </div>
                     </div>
-
-                    {/* Alternatives */}
-                    {event.alternatives && event.alternatives.length > 0 && (
-                      <div>
-                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
-                          Alternatives Considered
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {event.alternatives.map((alt, i) => (
-                            <span key={i} className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-400">
-                              {alt}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Error if any */}
-                    {event.error && (
-                      <div className="text-xs text-red-400 bg-red-500/10 p-2 rounded">
-                        Error: {event.error}
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -410,17 +442,12 @@ export default function DetectionView({ threadId, pollMs = 2000 }: DetectionView
       )}
 
       {/* Legend */}
-      <div style={{
-        backgroundColor: 'rgba(30,41,59,0.3)',
-        border: '1px solid #334155',
-        borderRadius: '12px',
-        padding: '16px 20px'
-      }}>
-        <div style={{ fontWeight: '600', color: '#cbd5e1', marginBottom: '12px', fontSize: '14px' }}>Detection Pipeline Stages</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', fontSize: '14px', color: '#94a3b8' }}>
-          <div><span style={{ color: '#60a5fa', fontWeight: '500' }}>Regex</span> - Pattern matching (fastest, first checked)</div>
-          <div><span style={{ color: '#c084fc', fontWeight: '500' }}>NER</span> - Named Entity Recognition</div>
-          <div><span style={{ color: '#4ade80', fontWeight: '500' }}>LLM</span> - AI extraction (slowest, most flexible)</div>
+      <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-5">
+        <div className="font-semibold text-slate-300 mb-3 text-sm">Detection Pipeline Stages</div>
+        <div className="flex flex-wrap gap-6 text-sm text-slate-400">
+          <div><span className="text-blue-400 font-medium">Regex</span> - Pattern matching (fastest, first checked)</div>
+          <div><span className="text-purple-400 font-medium">NER</span> - Named Entity Recognition</div>
+          <div><span className="text-green-400 font-medium">LLM</span> - AI extraction (slowest, most flexible)</div>
         </div>
       </div>
     </div>

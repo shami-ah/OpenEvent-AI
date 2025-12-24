@@ -1,50 +1,25 @@
 """
-Offer workflow group.
+DEPRECATED: Use backend.workflows.steps.step4_offer instead.
 
-Provides typed node classes used for composing and delivering offers before
-handing off to the event confirmation flow.
+This module re-exports from the new canonical location for backwards compatibility.
 """
 
-from __future__ import annotations
+import warnings as _warnings
 
-from typing import Any, Dict
+_warnings.warn(
+    "backend.workflows.groups.offer is deprecated. "
+    "Use backend.workflows.steps.step4_offer instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-
-class WorkflowNode:
-    """Minimal base node with a common run signature."""
-
-    role: str = "node"
-
-    def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:  # pragma: no cover - interface
-        raise NotImplementedError("Subclasses must implement run()")
-
-
-class OpenEventAction(WorkflowNode):
-    """Manager/system action node (light-blue)."""
-
-    role = "OpenEvent Action"
-
-
-class LLMNode(WorkflowNode):
-    """Generative reasoning node (green/orange)."""
-
-    role = "LLM"
-
-
-class TriggerNode(WorkflowNode):
-    """Client-trigger node (purple)."""
-
-    role = "Trigger"
-
-    def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        return payload
-
-
-class ClientReply(TriggerNode):
-    """Shim for the client reply trigger feeding the AnalyzeClientReply node."""
-
-    role = "Client Reply Trigger"
-
+from backend.workflows.steps.step4_offer import (
+    WorkflowNode,
+    OpenEventAction,
+    LLMNode,
+    TriggerNode,
+    ClientReply,
+)
 
 __all__ = [
     "WorkflowNode",

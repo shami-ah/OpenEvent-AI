@@ -9,9 +9,9 @@ import importlib
 from backend.workflows.common.types import GroupResult, IncomingMessage, WorkflowState
 from backend.workflows.common import general_qna
 from backend.workflows.common.general_qna import enrich_general_qna_step2, render_general_qna_reply
-from backend.workflows.groups.date_confirmation.trigger.process import _present_general_room_qna
+from backend.workflows.steps.step2_date_confirmation.trigger.process import _present_general_room_qna
 
-date_process_module = importlib.import_module("backend.workflows.groups.date_confirmation.trigger.process")
+date_process_module = importlib.import_module("backend.workflows.steps.step2_date_confirmation.trigger.process")
 
 
 @pytest.fixture

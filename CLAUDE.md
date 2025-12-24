@@ -1,15 +1,85 @@
 # CLAUDE.md
 
-This file provides guidance to Claude 4.5 working on the OpenEvent-AI repository.
+This file provides guidance to Claude (Opus 4.5) working on the OpenEvent-AI repository.
+
+## Current Stage: Testing / Pre-Production (December 2025)
+
+**The application is feature-complete for core workflow (Steps 1-7) and in active testing phase.**
+
+Goals for this phase:
+- Make the system **resilient against diverse client inputs** (multiple languages, edge cases)
+- Achieve **production stability** with comprehensive regression tests
+- Eliminate circular bugs and ensure all code paths are covered
+- Complete integration with Supabase/Hostinger for production deployment
+
+**Key metrics to watch:**
+- No silent fallback messages reaching clients
+- All HIL tasks route correctly
+- Special flows (billing, deposit, site visit) work end-to-end
+- LLM outputs fact-checked via "safety sandwich" validation
 
 ## Your Role
 
 - Act as a senior test- and workflow-focused engineer
 - Keep the system aligned with the management plan "Lindy" and Workflow v3/v4 specifications
 - Prioritize deterministic backend behaviour and strong automated tests over ad-hoc changes
-- Maintain clear documentation of bugs in TEAM_GUIDE.md and new features and changes communicated by me in the chat into the DEV_CHANGELOG.md . Always consult TEAM_GUIDE.md before fixing a bug in case it already existed. 
-- For new ideas collected in the chat (often too big to implement in the same task, happy accidents/ideas that happened while fixing another problem) write them to new_features.md in root so we can discuss them later.
-- For each new session always re-read the git commits since your last session to stay up to date and DEV_CHANGELOG.md for recent changes. Also reread the workflow v4 in backend workflow/specs/ . 
+- Maintain clear documentation of bugs in `docs/TEAM_GUIDE.md` and new features/changes in `DEV_CHANGELOG.md`. **You must automatically update these files without being asked.**
+- **CRITICAL:** Before fixing ANY bug, you **MUST** consult `docs/TEAM_GUIDE.md` to see if it's a known issue or if there are specific handling instructions.
+- **Session Startup:** At the start of EVERY new session, you **MUST** read:
+  1. `git log` (last few commits) to understand recent context.
+  2. `DEV_CHANGELOG.md` to see high-level changes.
+  3. `docs/TEAM_GUIDE.md` to be aware of current bugs and guidelines.
+  4. Workflow v4 specs in `backend/workflow/specs/` if relevant to the task.
+- For new ideas collected in the chat (often too big to implement in the same task, happy accidents/ideas that happened while fixing another problem) write them to new_features.md in root so we can discuss them later. 
+
+## NO-TOUCH ZONES (Requires Explicit Permission)
+
+**NEVER modify these files/directories without explicit user permission:**
+
+- `backend/workflows/specs/` (These are the "Source of Truth" definitions; do not change the law to fit the code)
+- `configs/llm_profiles.json` (LLM Configuration)
+- `backend/config.py` (Core backend configuration)
+- `backend/utils/openai_key.py` (Authentication logic)
+- `.env` / `.env.example` (Environment configuration)
+- `atelier-ai-frontend/package.json` / `backend/requirements.txt` (Dependency definitions - ask before adding deps)
+
+## QUALITY GATES (Run Before Committing)
+
+**Before ANY commit, ensure these pass:**
+
+1. **Backend Tests:**
+   ```bash
+   pytest
+   ```
+   *Must pass with zero failures.*
+
+2. **Frontend Check:**
+   ```bash
+   cd atelier-ai-frontend && npm run build
+   # and if applicable:
+   npm test
+   ```
+   *Must build without errors.*
+
+3. **Type/Lint Checks (if applicable):**
+   - Check for obvious syntax errors or type mismatches before finalizing.
+
+## REGRESSION PREVENTION & WORKFLOW
+
+1. **ONE change at a time**
+   - Do not combine refactors with bug fixes.
+   - Do not combine multiple feature implementations. Rather write them to new_features.md for later.
+
+2. **List affected files BEFORE writing code**
+   - Explicitly state: "I plan to modify X, Y, and Z."
+
+3. **Scope Guard**
+   - If a task requires touching more than 3 files, **STOP and ask for confirmation**.
+   - Do not "cleanup" unrelated code while fixing a bug.
+
+4. **Verify Tests First**
+   - Before fixing a bug, run the test that reproduces it.
+   - If no test exists, write one.
 
 ## Canonical Vocabulary and Concepts
 
@@ -21,20 +91,26 @@ This file provides guidance to Claude 4.5 working on the OpenEvent-AI repository
   - OpenEvent Database (dark-blue)
   - Condition (purple)
 - Event statuses: `Lead` → `Option` → `Confirmed`
-- Workflow steps: Follow documented Workflow v3/v4, especially Steps 1–4 and their detours
+- Workflow steps: Follow documented Workflow v3/v4, all Steps 1–7 and their detours
 
 ## Primary References
 
 **Always open/re-read relevant ones before major changes:**
+
+**Living documents (check frequently):**
+- `DEV_CHANGELOG.md` - Recent changes, fixes, new features (check at session start!)
+- `docs/TEAM_GUIDE.md` - Bugs, open issues, heuristics, prevention patterns
+- `backend/workflow/specs/` - V4 workflow specifications (authoritative)
+
+**Architecture & workflow:**
+- `docs/workflow_rules.md` - Core workflow rules
+- Openevent - Workflow v3 TO TEXT (MAIN).pdf - Main workflow reference
+- `docs/internal/step4_step5_requirements.md` - Offer/negotiation requirements
+
+**Legacy (for context only):**
 - AI-Powered Event Management Platform.pdf
 - Workflow v3.pdf
-- Workflow instance working on Lindy.pdf
-- Openevent - Workflow v3 TO TEXT (MAIN).pdf
 - Technical Workflow v2.pdf
-- workflow_rules.md
-- step4_step5_requirements.md
-- qna_shortcuts_debugger.md
-- TEAM_GUIDE.md (bugs, open issues, heuristics)
 
 ## Environment and API Keys
 
@@ -43,17 +119,19 @@ This file provides guidance to Claude 4.5 working on the OpenEvent-AI repository
 - Python code and tests must obtain the key via `backend/utils/openai_key.load_openai_api_key()`, not `os.getenv` directly
 
 **Before running any tests or scripts that call OpenAI:**
-1. Activate the dev environment from repo root:
+1. Use the dev server script (preferred) or activate manually:
    ```bash
-   cd /Users/nico/PycharmProjects/OpenEvent-AI
+   ./scripts/dev_server.sh   # Handles everything including API key
+   # OR manually:
    source scripts/oe_env.sh
    ```
 
-2. Preferred test commands under this activated environment:
+2. Run tests (API key loaded automatically):
    ```bash
-   pytest backend/tests/smoke/test_workflow_v3_agent.py -q
-   pytest backend/tests_integration/test_e2e_live_openai.py -q
-   # and other pytest commands
+   # Primary test suites
+   pytest backend/tests/detection/ -v    # Detection tests
+   pytest backend/tests/regression/ -v   # Regression tests
+   pytest backend/tests/flow/ -v         # Workflow flow tests
    ```
 
 ## Debugger and Conversation Traces
@@ -190,6 +268,141 @@ Maintain a lightweight log in DEV_CHANGELOG.md at repo root:
 
 newest entries at the top.
 
+## Bug Prevention Patterns (CRITICAL)
+
+**These patterns prevent the most common circular bugs. Check ALL of them before implementing any fix.**
+
+### Pattern 1: Special Flow State Detection
+
+When the workflow is in a special state (billing capture, deposit waiting, site visit), **ALL code paths must check for it** and bypass normal detection.
+
+**The Billing Flow Pattern (model for all special flows):**
+```python
+# Check BEFORE any change detection or routing
+in_billing_flow = (
+    event_entry.get("offer_accepted")
+    and (event_entry.get("billing_requirements") or {}).get("awaiting_billing_for_accept")
+)
+
+if in_billing_flow:
+    # Skip date change detection
+    # Skip room change detection
+    # Skip requirements change detection
+    # Skip duplicate message detection
+    # Route directly to billing handler
+```
+
+**Checklist for any special flow state:**
+1. ✅ `workflow_email.py` - Duplicate message detection
+2. ✅ `workflow_email.py` - Step routing loop
+3. ✅ `step1_handler.py` - Change detection (date, room, requirements)
+4. ✅ Step handlers (step4/step5) - Confirmation gate checks
+
+### Pattern 2: Step Corruption Prevention
+
+**Problem:** Event gets stored at wrong step, causing wrong routing on next message.
+
+**Solution:** Force correct step BEFORE the routing loop, not after:
+```python
+# In workflow_email.py, BEFORE the main routing loop:
+if in_billing_flow and stored_step != 5:
+    print(f"[WF][BILLING_FIX] Correcting step from {stored_step} to 5")
+    state.event_entry["current_step"] = 5
+    state.extras["persist"] = True
+```
+
+### Pattern 3: Response Key Access
+
+**Problem:** Different handlers return different response structures, causing KeyError.
+
+**Solution:** Always use defensive `.get()` with defaults:
+```python
+# BAD - will crash if structure differs
+body = response["draft"]["body"]
+
+# GOOD - handles missing keys gracefully
+draft = response.get("draft") or {}
+body = draft.get("body", "Default message")
+```
+
+### Pattern 4: The "Detection Bypass" Rule
+
+**When fixing detection issues:** If a message should NOT trigger detection (e.g., billing address shouldn't trigger room change), add an **early return** guard, not a late filter:
+
+```python
+# At the TOP of detection function
+if in_special_flow:
+    return None  # Skip detection entirely
+
+# NOT at the bottom filtering results
+```
+
+### Pattern 5: Hash Guard Verification
+
+Before modifying room/date/requirements state, verify hash guards:
+```python
+# If room_eval_hash exists and matches requirements_hash, room is still valid
+# If offer_hash exists and matches current state, offer is still valid
+# Only clear hashes when the underlying data actually changes
+```
+
+### Common Circular Bug Patterns (From Recent History)
+
+| Pattern | Symptom | Cause | Fix |
+|---------|---------|-------|-----|
+| **Wrong step routing** | Event at Step 3 instead of Step 5 | Previous flow set step incorrectly | Force correct step before routing |
+| **Duplicate detection blocks flow** | `action=duplicate_message` | Special flow not exempted | Add `in_special_flow` bypass |
+| **Change detection during special flow** | Date/room change triggered when providing billing | Detection runs on all messages | Add `in_special_flow` guard |
+| **Response key mismatch** | KeyError on `response["body"]` | Handler returns `{"draft": {"body": ...}}` | Use `.get()` chains |
+| **HIL task not created** | Workflow completes but no task | Missing `actions` in response | Check return structure |
+
+### Testing Special Flows
+
+Always test with:
+1. **Fresh event** - New inquiry through full flow
+2. **Existing event at mid-step** - Continue from specific state
+3. **Corrupted state** - Event with wrong step value
+4. **Edge case inputs** - Empty strings, unicode, multilingual
+
+### Frontend End-to-End Testing Protocol (CRITICAL)
+
+**For billing→deposit→HIL flow and other critical workflows, ALWAYS verify in the actual frontend UI, not just via API/Python tests.** Some issues only manifest in the frontend session flow due to session/thread_id handling.
+
+**Protocol for Frontend Testing:**
+
+1. **Use fresh client data:**
+   - Use a new email address (e.g., `test-YYYYMMDD@example.com`), OR
+   - Click "Reset Client" button to clear existing client data
+
+2. **Run complete flow in frontend:**
+   - Start conversation with initial inquiry
+   - Go through each step (date → room → offer)
+   - Accept offer → Provide billing → Pay deposit
+   - Verify HIL task appears in "📋 Manager Tasks" section
+
+3. **Verify database state after each critical step:**
+   ```bash
+   python3 -c "
+   import json
+   with open('backend/events_database.json') as f:
+       db = json.load(f)
+   for e in db.get('events', []):
+       if 'YOUR_EMAIL' in json.dumps(e):
+           print(f'Step: {e.get(\"current_step\")}')
+           print(f'Billing: {(e.get(\"billing_details\") or {}).get(\"street\")}')
+           print(f'HIL Tasks: {len(e.get(\"pending_hil_requests\", []))}')
+   "
+   ```
+
+4. **Expected outcomes for billing→HIL flow:**
+   - `billing_details.street` populated after billing message
+   - `awaiting_billing_for_accept=False` after billing captured
+   - `deposit_paid=True` after Pay Deposit clicked
+   - `pending_hil_requests` contains offer_message task
+   - "📋 Manager Tasks" section visible with Approve/Reject buttons
+
+**Why frontend testing matters:** The frontend uses `/api/send-message` which has different session handling than direct `process_msg()` calls. Issues like billing not being captured can occur in frontend but not in API tests.
+
 ## Testing Principles (High Priority)
 
 **The test suite is the main guardrail; keep it clean, well-structured and focused on high-value behaviours.**
@@ -235,9 +448,10 @@ Add assertions or tests so that such paths are detectable and fail loudly in tes
 
 ## When in Doubt
 
-- Re-read Workflow v3 TO TEXT , FRONTEND_REFERENCE.md and TEAM_GUIDE.md
+- **Check TEAM_GUIDE.md** first - the bug may already be documented with a fix
+- **Check DEV_CHANGELOG.md** - recent changes may explain unexpected behavior
+- **Re-read Bug Prevention Patterns** (above) before implementing any fix
 - Prefer adding or strengthening tests before changing logic
-- If something feels like a "shortcut", check shortcut_workflow_request.txt and qna_shortcuts_debugger.md before proceeding
 
 ## Project Overview
 
@@ -248,14 +462,26 @@ OpenEvent is an AI-powered venue booking workflow system for The Atelier. It aut
 ## Development Commands
 
 ### Backend (Python FastAPI)
+
+**Preferred: Use the dev server script (handles cleanup, API keys, PID tracking):**
+```bash
+./scripts/dev_server.sh         # Start backend (with auto-cleanup)
+./scripts/dev_server.sh stop    # Stop backend
+./scripts/dev_server.sh restart # Restart backend
+./scripts/dev_server.sh status  # Check if running
+./scripts/dev_server.sh cleanup # Kill all dev processes (backend + frontend)
+```
+
+**Manual startup (if dev_server.sh unavailable):**
 ```bash
 # Start backend server (from repo root)
-export PYTHONDONTWRITEBYTECODE=1  # optional, prevents .pyc permission issues on macOS
+export PYTHONDONTWRITEBYTECODE=1  # prevents .pyc permission issues on macOS
+source scripts/oe_env.sh  # loads API key from Keychain
 uvicorn backend.main:app --reload --port 8000
-
-# Run specific workflow step manually
-python -B backend/availability_pipeline.py <EVENT_ID>
 ```
+
+**Run specific workflow step manually:**
+Deprecated. Please use the dev server or run tests.
 
 ### Frontend (Next.js)
 ```bash
@@ -272,38 +498,28 @@ npm test         # vitest
 
 ### Testing
 
-**Primary test suite (v4 workflow tests):**
+**Primary test suites:**
 ```bash
-# Run default v4 tests (excludes legacy)
+# Run all tests
 pytest
 
-# Run specific workflow alignment tests (Steps 1-3)
-pytest tests/specs/
+# Run by category
+pytest backend/tests/detection/ -v    # Intent/entity detection
+pytest backend/tests/regression/ -v   # Regression tests (critical!)
+pytest backend/tests/flow/ -v         # Workflow flow tests
 
-# Run end-to-end v4 tests
-pytest tests/e2e_v4/
+# Run single test with verbose output
+pytest backend/tests/regression/test_billing_flow.py -v
 
-# Run regression suite
-pytest tests/regression/
-
-# Run legacy v3 alignment tests (if needed)
-pytest -m legacy
-
-# Run all tests including legacy
-pytest -m "v4 or legacy"
-
-# Run single test
-pytest tests/e2e_v4/test_happy_path.py::test_intake_to_confirmation -v
+# Run with live OpenAI (not stubbed)
+AGENT_MODE=openai pytest backend/tests/flow/ -v
 ```
 
-**CI/stub mode (auto-selects live or stubbed LLM):**
+**Quick validation command:**
 ```bash
-./scripts/run_ci_or_stub.sh
+# Recommended: Run detection + regression + flow tests
+pytest backend/tests/detection/ backend/tests/regression/ backend/tests/flow/ -v --tb=short
 ```
-
-Test markers are defined in `pytest.ini`:
-- `v4`: Current workflow tests (default)
-- `legacy`: Legacy v3 alignment tests
 
 ### Dependencies
 ```bash
@@ -359,44 +575,42 @@ Confirmation / Deposit
 
 ### 7-Step Pipeline (Implementation Locations)
 
-1. **Step 1 - Intake** (`backend/workflows/groups/intake/`):
+1. **Step 1 - Intake** (`backend/workflows/steps/step1_intake/`):
    - [LLM-Classify] intent, [LLM-Extract] entities (Regex→NER→LLM)
    - Loops: ensure email present, date complete (Y-M-D), capacity present (int)
    - Captures `wish_products` for ranking (non-gating)
    - **Never re-runs post-creation** (HIL edits only)
 
-2. **Step 2 - Date Confirmation** (`backend/workflows/groups/date_confirmation/`):
+2. **Step 2 - Date Confirmation** (`backend/workflows/steps/step2_date_confirmation/`):
    - Calls `db.dates.next5` with **TODAY (Europe/Zurich)** ≥ TODAY, blackout/buffer rules
    - Presents none/one/many-feasible flows via [LLM-Verb] → [HIL] → send
    - Parses client reply [LLM-Extract] → ISO date
    - On confirmation: `db.events.update_date`, sets `date_confirmed=true`
 
-3. **Step 3 - Room Availability** (`backend/workflows/groups/room_availability/`):
+3. **Step 3 - Room Availability** (`backend/workflows/steps/step3_room_availability/`):
    - Entry guards: A (no room), B (room change request), C (requirements change)
    - Calls `db.rooms.search(chosen_date, requirements)` → branches:
      - Available: [LLM-Verb] → [HIL] → on "proceed" → `db.events.lock_room(locked_room_id, room_eval_hash=requirements_hash)`
      - Option: explain option → [HIL] → accept option or detour to Step 2
      - Unavailable: propose date/capacity change → detour to Step 2 (caller_step=3) or loop on req change
 
-4. **Step 4 - Offer** (`backend/workflows/groups/offer/`):
+4. **Step 4 - Offer** (`backend/workflows/steps/step4_offer/`):
    - Validates P1-P4; detours if any fail
-   - Products mini-flow:
-     - ≤5 rooms: [LLM-Verb] table (confirmed + up to 5 alts), rank by `wish_products` fulfillment
-     - >5 rooms: ask "specific products/catering?", re-rank via `db.products.rank`
-     - Special requests → [HIL] decide → loop until approved or denied
    - Compose: [LLM-Verb] professional offer + totals → [HIL] approve
+   - Handles billing address capture and deposit requirements
    - Send: `db.offers.create(status=Lead)` → `offer_id`
 
-5. **Step 5 - Negotiation** (`backend/workflows/groups/negotiation_close.py`):
+5. **Step 5 - Negotiation** (`backend/workflows/steps/step5_negotiation/`):
    - Interprets accept/decline/counter/clarification
+   - Handles billing flow when offer accepted
    - Structural changes route back to Steps 2/3/4 via detours
    - Accept → hands off to Step 7
 
-6. **Step 6 - Transition Checkpoint** (`backend/workflows/groups/transition_checkpoint.py`):
+6. **Step 6 - Transition Checkpoint** (deprecated - logic merged into Steps 5/7):
    - Validates all prerequisites before Step 7
    - Sets `transition_ready` flag
 
-7. **Step 7 - Confirmation** (`backend/workflows/groups/event_confirmation/`):
+7. **Step 7 - Confirmation** (`backend/workflows/steps/step7_confirmation/`):
    - Manages site visits, deposits, reserves, declines, final confirmations
    - Option/deposit branches via `db.policy.read`, `db.options.create_hold`
    - All transitions audited through HIL gates
@@ -487,11 +701,17 @@ The workflow uses three distinct LLM roles, each with strict boundaries:
 **Critical Boundary:** LLM adapters receive curated JSON payloads from the workflow engine and NEVER call database functions directly. All DB operations flow through the engine's adapter surface.
 
 **Environment Variables:**
-- `AGENT_MODE`: `openai` (live) or `stub` (testing)
-- `OE_LLM_PROFILE`: Profile name from `configs/llm_profiles.json`
-- `OPENAI_API_KEY`: Set via environment or macOS Keychain (see `scripts/run_ci_or_stub.sh`)
+- `AGENT_MODE`: `openai` (live) or `stub` (testing) - controls LLM behavior
+- `OE_DEV_TEST_MODE`: `true` (show continue/reset choice) or `false` (auto-continue)
+- `OE_HIL_ALL_LLM_REPLIES`: `true` to require HIL approval for ALL AI responses
+- `OPENAI_API_KEY`: Set via environment or macOS Keychain
+- `VERBALIZER_TONE`: `professional` (default) or `plain` for testing
 
-**Testing:** Tests in `tests/stubs/` provide deterministic LLM responses for regression tests but do not reflect live behaviour of agent using OpenAI key. So always test with real openai key mimicking real user flow as it happens in the real world (not just backend but UX and user perspective). The challenge of this application is making it generally useful and not having to specifically hardcode each new scenario. We are looking for a sustainable , long and general solution for all kind of client responses (focusing on 2 languages for now but planning multilingual usage for the future).
+**Testing Philosophy:**
+- Tests should use real OpenAI when possible to catch LLM behavior changes
+- Always test end-to-end flows (not just unit tests) mimicking real client interactions
+- The system must handle diverse inputs without hardcoding specific scenarios
+- Current languages: German and English (multilingual expansion planned)
 
 ## Important Implementation Notes
 
@@ -507,7 +727,7 @@ The workflow uses three distinct LLM roles, each with strict boundaries:
 
 **Open Decisions:** Write questions which arent clear regarding logic, UX into docs/internal/OPEN_DECISIONS.md and docs/integration_to_frontend_and_database/MANAGER_INTEGRATION_GUIDE.md 
 
-**Git Commits:** For longer session where you complete multiple tasks , always add a git commit after every fully completed task and I will push that later when the session is over. This helps me track your progress and revert specific changes if needed.
+**Git Commits:** For longer sessions with multiple subtasks, **commit frequently** (more than once per session). Commit after every logical step or fully completed subtask. Do not wait until the very end of a long session to commit. This helps track progress and allows for easier rollbacks. I will push the commits later.
 
 **Summaries after completed task** Always provide a short summary referencing every point (completeness!) I mentioned in the beginning of this document after you completed a task. This helps me track your progress and understand what you did. If there are still open points cause there was too much to do pls list them
 
@@ -519,3 +739,136 @@ The workflow uses three distinct LLM roles, each with strict boundaries:
 4. **Hash Mismatches:** If `room_eval_hash` doesn't match `requirements_hash`, Step 3 blocks until re-approved
 5. **Pytest Test Selection:** Default runs `v4` tests only; use `-m "v4 or legacy"` to include all
 6. **LLM Stub vs Live:** Tests in `tests/stubs/` use stubbed LLM responses; always validate critical flows with live OpenAI key mimicking real client interactions from workflow start to end (offer confirmation).
+
+## General Techniques for Resilient Code
+
+### Defensive State Access
+
+Always assume event_entry fields may be missing or malformed:
+```python
+# BAD - crashes if billing_requirements is None
+billing = event_entry["billing_requirements"]["address"]
+
+# GOOD - handles all missing cases
+billing_req = event_entry.get("billing_requirements") or {}
+address = billing_req.get("address", "")
+```
+
+### Unified Gate Checking
+
+Use the confirmation gate pattern for any multi-prerequisite check:
+```python
+from backend.workflows.common.confirmation_gate import check_confirmation_gate
+
+gate = check_confirmation_gate(event_entry)
+if gate.ready_for_hil:
+    # All prerequisites met
+elif gate.missing_billing:
+    # Request billing
+elif gate.missing_deposit:
+    # Show deposit button
+```
+
+### Detection Pipeline Order
+
+Follow this order to avoid false positives:
+1. **Special flow guards** (billing, deposit, site visit) - return early
+2. **Duplicate message check** - return early if duplicate
+3. **Intent classification** - determine message type
+4. **Entity extraction** - Regex → NER → LLM pipeline
+5. **Change detection** - only if not in special flow
+
+### Safety Sandwich Pattern
+
+All client-facing LLM output must go through verification:
+```python
+# 1. Build facts from database (deterministic)
+facts = build_room_offer_facts(event_entry)
+
+# 2. Generate LLM draft
+draft = llm_verbalize(facts)
+
+# 3. Verify/correct the draft
+verified = correct_output(facts, draft)  # Fixes hallucinations
+
+# 4. Only then send to client (via HIL)
+```
+
+### Multilingual Resilience
+
+The system handles German and English. When adding detection patterns:
+```python
+# Include both languages in keyword lists
+ACCEPTANCE_KEYWORDS = [
+    "yes", "ok", "agree", "accept",  # English
+    "ja", "einverstanden", "akzeptiert",  # German
+]
+
+# Use case-insensitive matching
+if any(kw in message.lower() for kw in ACCEPTANCE_KEYWORDS):
+    ...
+```
+
+## Dev Test Mode
+
+When testing with existing events, the system offers a continue/reset choice:
+
+**Enable/disable:**
+```bash
+export OE_DEV_TEST_MODE=true   # Enable choice (default)
+export OE_DEV_TEST_MODE=false  # Auto-continue always
+```
+
+**Skip programmatically:**
+```bash
+curl -X POST http://localhost:8000/api/start-conversation \
+  -H "Content-Type: application/json" \
+  -d '{"email_body": "...", "skip_dev_choice": true}'
+```
+
+## Production Readiness Checklist
+
+Before deploying to production:
+
+### Core Workflow
+- [ ] All 7 steps complete happy-path test
+- [ ] Detour and return flows work (date change → Step 2 → return)
+- [ ] Room lock preservation on date change
+- [ ] Site visit flow end-to-end
+- [ ] Deposit payment continuation
+
+### HIL Integration
+- [ ] All HIL tasks created at correct moments
+- [ ] Approve/reject buttons functional
+- [ ] Task persistence across server restarts
+- [ ] No orphaned tasks (completed events with pending tasks)
+
+### Error Handling
+- [ ] No silent fallback messages reaching clients
+- [ ] All LLM outputs fact-checked
+- [ ] Graceful handling of API timeouts
+- [ ] Database lock contention handled
+
+### Security
+- [ ] API keys never in code or logs
+- [ ] Input sanitization on all client messages
+- [ ] Rate limiting on public endpoints
+
+### Observability
+- [ ] Debug traces enabled for all flows
+- [ ] Error logging with context
+- [ ] Performance metrics for LLM calls
+
+## Quick Reference: Key Files
+
+| Purpose | Location |
+|---------|----------|
+| Main orchestrator | `backend/workflow_email.py` |
+| Step handlers | `backend/workflows/steps/step{N}_{name}/trigger/` |
+| Confirmation gate | `backend/workflows/common/confirmation_gate.py` |
+| Safety sandwich | `backend/ux/verbalizer_safety.py` |
+| Database adapter | `backend/workflows/io/database.py` |
+| Debug traces | `backend/debug/trace.py` |
+| Dev server script | `scripts/dev_server.sh` |
+| Test suite | `backend/tests/` |
+| Workflow specs | `backend/workflow/specs/` |

@@ -20,7 +20,7 @@ import pytest
 from backend import workflow_email as wf
 from backend.domain import IntentLabel, TaskStatus
 from backend.workflows.common.types import IncomingMessage, WorkflowState
-from backend.workflows.groups import negotiation_close
+from backend.workflows.steps import step5_negotiation as negotiation_close
 
 
 # ==============================================================================

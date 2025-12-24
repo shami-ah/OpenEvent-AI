@@ -1,6 +1,605 @@
 # Development Changelog
 
+## 2025-12-24
+
+### Fix: Verbalizer Not Mentioning Closest Preference Matches
+
+**Problem:** When a client mentioned "dinner" in their inquiry, the preference extraction and room scoring worked correctly (showing `closest: ['Classic Apéro (closest to dinner)']`), but the AI response never mentioned this preference match to the client.
+
+**Root Cause:** The `_format_facts_section()` function in `universal_verbalizer.py` extracted `matched` and `missing` from room requirements, but **not `closest`**. This meant the LLM never saw the closest match data in its prompt.
+
+**Solution:** Added `closest` extraction and formatting alongside `matched` and `missing` in the room data section.
+
+**Files Modified:**
+- `backend/ux/universal_verbalizer.py:597-603` - Added `closest` field extraction and formatting
+
+**Result:** AI responses now correctly mention preference matches, e.g., "While we don't have a dedicated dinner package, our Classic Apéro comes closest to what you're looking for."
+
+---
+
+### Fix: Event Type Priority Order for Preference Extraction
+
+**Problem:** "dinner party" was extracting as "party" instead of "dinner" because generic event types (party) appeared before food types (dinner) in the extraction list.
+
+**Solution:** Reordered event_types list to prioritize food/catering types first (dinner, lunch, breakfast...) before generic types (party, celebration).
+
+**Files Modified:**
+- `backend/adapters/agent_adapter.py:173-188` - Reordered event types with food types first
+
+**Result:** "dinner party" now correctly extracts as "dinner".
+
+---
+
+### Enhancement: Add Closest Matches to Verbalizer Room Payload
+
+**Problem:** The Step 3 handler was calculating closest preference matches but not passing them to the verbalizer.
+
+**Solution:** Added `closest` field to the requirements dict in `_verbalizer_rooms_payload()` and updated `_derive_hint()` to show closest matches when no exact matches exist.
+
+**Files Modified:**
+- `backend/workflows/steps/step3_room_availability/trigger/step3_handler.py:1183-1188, 1248` - Added closest to payload and hint derivation
+
+**Result:** Room buttons now show hints like "Classic Apéro" for closest matches when no exact match exists.
+
+---
+
+## 2025-12-23
+
+### Fix: Event Type Extraction for Preference Matching (dinner, banquet, etc.)
+
+**Problem:** When a client mentioned "dinner event" in their inquiry, the event type was not being extracted, so preference matching couldn't recommend rooms with relevant catering options.
+
+**Root Cause:** The `StubAgentAdapter._extract_entities()` only recognized a limited set of event types: workshop, meeting, conference, seminar, wedding, party, training. Food/catering event types like "dinner", "banquet", "cocktail" were missing.
+
+**Solution:** Expanded the event type list to include: dinner, lunch, breakfast, brunch, reception, cocktail, apéro, aperitif, banquet, gala, birthday, celebration, presentation, lecture, talk.
+
+**Files Modified:**
+- `backend/adapters/agent_adapter.py:173-183` - Expanded event_types list
+
+**Result:** "dinner event" now extracts `type: dinner`, which flows to `wish_products: ['dinner']`, enabling room preference matching with catering options.
+
+---
+
+### Fix: Room Preference Matching for Layout Types (workshop, theatre, etc.)
+
+**Problem:** When a client mentioned "workshop" in their inquiry, the preference extraction worked but room matching returned 0.0 score for all rooms. Rooms with "workshop" layout capability were shown as `missing: ["workshop"]` instead of `matched: ["Workshop"]`.
+
+**Root Cause:** The `_score_rooms_by_products` function in `preferences.py` only checked `features` and `services` from room data, but `capacity_by_layout` keys (like "workshop", "theatre", "u_shape") were not included in matchable features.
+
+**Solution:** Updated both `_room_catalog()` and `_score_rooms_by_products()` to include layout types from `capacity_by_layout` as matchable room features.
+
+**Files Modified:**
+- `backend/workflows/nlu/preferences.py:391-404` - Include layout keys in `_room_catalog()`
+- `backend/workflows/nlu/preferences.py:219-221` - Include layout keys in `_score_rooms_by_products()`
+
+**Result:** Rooms A, B, C, D, F now correctly match "workshop" preference with score 1.0.
+
+---
+
+### Fix: Acceptance Messages Triggering False Positive Room Change Detection
+
+**Problem:** During the offer acceptance flow, "Yes, I accept" messages were incorrectly triggering room change detection, causing infinite loops between Step 5 → Step 3 with `structural_change_detour` action.
+
+**Root Cause:** The `_detect_structural_change` function in Step 5 ran LLM extraction on all messages, including acceptance messages. The LLM sometimes extracted spurious "room" values from acceptance phrases, triggering false positive room change detection.
+
+**Symptom:** Audit log showed repeated `Step 5 → 3 (negotiation_changed_room)` entries. Event stuck at `current_step: 3` with `caller_step: 5`.
+
+**Solution:** Added acceptance guard at the start of `_detect_structural_change`:
+```python
+if message_text:
+    is_acceptance, confidence, _ = matches_acceptance_pattern(message_text.lower())
+    if is_acceptance and confidence >= 0.7:
+        return None  # Skip change detection for acceptance messages
+```
+
+**Files Modified:**
+- `backend/workflows/steps/step5_negotiation/trigger/step5_handler.py:665-674` - Added acceptance guard
+
+**Tests:** E2E frontend flow verified: inquiry → room selection → offer → acceptance → billing → deposit → HIL task appears.
+
+---
+
+### Fix: HIL Task Shows in Tasks Panel, Not Chat (Deposit Flow)
+
+**Problem:** After paying the deposit, the HIL message was appearing directly in chat instead of the Manager Tasks panel. The correct flow is: deposit payment → HIL task in Tasks panel → manager clicks Approve → message appears in chat.
+
+**Root Causes:**
+1. **Frontend:** Previous fix incorrectly added `appendMessage()` to `handlePayDeposit`, which bypassed the HIL flow and sent messages directly to chat
+2. **Backend:** Event entries didn't have `thread_id` stored, so tasks filtered by `task.payload?.thread_id === sessionId` didn't match, hiding tasks from the panel
+
+**Solution:**
+1. Frontend (page.tsx): Removed `appendMessage()` from `handlePayDeposit` - HIL tasks should stay in Tasks panel
+2. Backend (step1_handler.py): Added `thread_id` to event entries in 4 places when created/updated
+
+**Files Modified:**
+- `atelier-ai-frontend/app/page.tsx:886-907` - Removed appendMessage from deposit handler
+- `backend/workflows/steps/step1_intake/trigger/step1_handler.py:1293-1403` - Added thread_id to events
+
+**Tests:** E2E frontend flow verified - deposit payment → HIL in Tasks panel → Approve → site visit message in chat.
+
+---
+
+## 2025-12-22
+
+### Fix: Billing Address Routing to Wrong Step
+
+**Problem:** After accepting an offer and providing a billing address, the system responded with a generic fallback message instead of routing to HIL for final approval. The billing address was sometimes captured as the original greeting message.
+
+**Root Causes:**
+1. **Duplicate message detection** blocked billing flow messages
+2. **Change detection** during billing triggered room/date changes
+3. **Step corruption** wasn't corrected when entering billing flow
+4. **Response key mismatch** in `_handle_accept()` return value
+
+**Solution:**
+1. Added billing flow bypass to duplicate message detection
+2. Added `in_billing_flow` guards to skip all change detection in step1_handler
+3. Added step correction to force `current_step=5` when in billing flow
+4. Fixed Step 5 to access `response["draft"]["body"]` instead of `response["body"]`
+
+**Files Modified:**
+- `backend/workflow_email.py` - Duplicate bypass + step correction
+- `backend/workflows/steps/step1_intake/trigger/step1_handler.py` - Change detection guards
+- `backend/workflows/steps/step5_negotiation/trigger/step5_handler.py` - Response key fix
+
+---
+
+### Feature: Dev Server Script
+
+**Purpose:** Reliable backend server management with automatic cleanup.
+
+**Usage:**
+```bash
+./scripts/dev_server.sh         # Start backend
+./scripts/dev_server.sh stop    # Stop backend
+./scripts/dev_server.sh restart # Restart backend
+./scripts/dev_server.sh status  # Check status
+./scripts/dev_server.sh cleanup # Kill all dev processes
+```
+
+**Features:**
+- Automatically kills zombie processes on port 8000
+- Loads OpenAI API key from macOS Keychain
+- PID tracking for reliable process management
+- Color-coded output for easy debugging
+
+---
+
+### Feature: Dev Test Mode (Continue/Reset Choice)
+
+**Purpose:** When testing with an existing event, offers choice to continue at current step or reset to a new event.
+
+**How it works:**
+- When a message matches an existing event AND the event is past Step 1
+- System shows a choice prompt: "Continue" or "Reset"
+- "Continue" resumes at the current step with all existing data
+- "Reset" creates a new event from scratch
+
+**API Endpoints:**
+- `POST /api/client/{client_id}/continue` - Continue workflow at current step
+- Response includes `dev_choice` object when choice is needed
+
+**Skip the choice:**
+- Pass `skip_dev_choice: true` in the message payload to auto-continue
+
+---
+
+### Feature: Unified Confirmation Gate
+
+**Purpose:** Order-independent prerequisite checking for offer confirmation.
+
+**Location:** `backend/workflows/common/confirmation_gate.py`
+
+**Checks:**
+1. `offer_accepted` - Has client accepted?
+2. `billing_complete` - Is billing address complete?
+3. `deposit_required` - Is deposit needed per policy?
+4. `deposit_paid` - Has deposit been paid?
+
+**Usage:**
+```python
+from backend.workflows.common.confirmation_gate import check_confirmation_gate
+
+gate_status = check_confirmation_gate(event_entry)
+if gate_status.ready_for_hil:
+    # All prerequisites met - continue to HIL
+```
+
+---
+
+## 2025-12-21
+
+### Fix: Step 4 HIL Approval Continuation
+
+**Problem:** When approving a Step 4 offer task (after deposit was paid), clicking "Approve" did nothing - the workflow didn't continue to site visit.
+
+**Root Cause:** The `approve_task_and_send` function only had special continuation handling for Step 5 tasks. Step 4 approvals just marked the task as approved without continuing the workflow.
+
+**Solution:** Added Step 4 handling in `backend/workflow_email.py`:
+- Check if `offer_accepted = True` and deposit is paid (or not required)
+- If so, apply the same negotiation decision logic as Step 5
+- Set `site_visit_state.status = "proposed"` to continue to site visit
+
+---
+
+### Fix: Deposit Payment Workflow Continuation
+
+**Problem:** After clicking "pay deposit" button, the workflow stopped instead of continuing to send the offer for HIL approval. The deposit was marked as paid in the database, but no further processing occurred.
+
+**Root Cause:** The `/api/event/deposit/pay` endpoint only marked the deposit as paid without triggering workflow continuation. Additionally, the step4_handler didn't track that the offer was already accepted.
+
+**Solution:**
+1. **`backend/api/routes/events.py`**:
+   - After marking deposit paid, check if prerequisites are met (billing address + offer accepted)
+   - If yes, send synthetic message to trigger workflow continuation
+   - If no, return success but don't continue (missing prerequisites)
+
+2. **`backend/workflows/steps/step4_offer/trigger/step4_handler.py`**:
+   - Set `offer_accepted = True` on event_entry when acceptance is detected
+   - Added `_check_deposit_payment_continuation()` helper function
+   - When offer_accepted + billing complete + deposit paid → route directly to HIL
+
+**Flow After Fix:**
+1. Client says "all good" → `offer_accepted = True`
+2. System asks for billing address
+3. Client provides billing → billing stored
+4. System shows deposit reminder → halts
+5. Client clicks "pay deposit" → deposit marked paid
+6. Synthetic message triggers workflow continuation
+7. `_check_deposit_payment_continuation()` detects all conditions met
+8. Routes to HIL for final approval
+
+---
+
+### Feature: Room Lock Preservation on Date Change Detours
+
+**Goal:** When a client changes the date from the offer/negotiation stage (Steps 4/5) and the locked room is still available on the new date, skip room selection and return directly to Step 4.
+
+**Problem:** Previously, when a client changed the date, `locked_room_id` was cleared unconditionally in multiple code paths. This forced the client to re-select the room even when it was still available on the new date—unnecessary friction in the workflow.
+
+**Expected Behavior (per Workflow v4 DAG):**
+1. Client changes date → detour to Step 2 for date confirmation
+2. After date confirmed, return to Step 3
+3. Step 3 checks: is the locked room still available on the new date?
+   - YES → update `room_eval_hash` and return to caller step (Step 4)
+   - NO → clear lock and present room options
+
+**Changes Made:**
+
+1. **`backend/workflows/steps/step4_offer/trigger/step4_handler.py`**:
+   - Modified date change handling to only clear `room_eval_hash=None` (trigger re-verification)
+   - Keep `locked_room_id` intact so Step 3 can check availability
+   - Requirements changes still clear the lock (room may no longer fit)
+
+2. **`backend/workflows/steps/step2_date_confirmation/trigger/step2_handler.py`**:
+   - Modified date change detection (~L881-897) to preserve `locked_room_id`
+   - Modified date confirmation flow (~L2384-2393) to preserve `locked_room_id`
+   - Only clear `room_eval_hash` to trigger Step 3 re-verification
+
+3. **`backend/workflows/steps/step3_room_availability/trigger/step3_handler.py`**:
+   - Modified date change detection (~L291-307) to preserve `locked_room_id`
+   - Added fast-skip logic (~L438-489) to check if locked room is still available:
+     ```python
+     if locked_room_id and not explicit_room_change:
+         locked_room_status = status_map.get(locked_room_id, "").lower()
+         if locked_room_status in ("available", "option"):
+             update_event_metadata(event_entry, room_eval_hash=current_req_hash)
+             return _skip_room_evaluation(state, event_entry)  # Return to caller
+         else:
+             update_event_metadata(event_entry, locked_room_id=None, room_eval_hash=None)
+     ```
+
+**Testing Status:** Partial fix applied; additional testing needed to verify all code paths.
+
+---
+
+## 2025-12-18
+
+### Fix: New Event Creation When Existing Event in Site Visit State
+
+**Problem:** New event inquiries from the same email were being matched to existing events instead of creating new ones. When an existing event had `site_visit_state.status = "proposed"`, new inquiries would trigger site visit routing and return fallback messages instead of proper room availability.
+
+**Root Cause:** `_ensure_event_record()` in step1_handler.py always reused the most recent event for the same email via `last_event_for_email()`, regardless of whether the existing event was in a terminal/mid-process state.
+
+**Changes Made:**
+- **`backend/workflows/steps/step1_intake/trigger/step1_handler.py`**: Added logic in `_ensure_event_record()` to create a NEW event when:
+  - New message has DIFFERENT event date than existing event (ONLY if date is an actual date, not "Not specified")
+  - Existing event status is "confirmed", "completed", or "cancelled"
+  - Existing event has `site_visit_state.status` in ("proposed", "scheduled")
+
+**Bug Fix (follow-up):** Initial version triggered on `new_event_date != existing_event_date` but `new_event_date` could be "Not specified" for follow-up messages without dates (like "Room E"), causing false positives. Fixed by checking `new_date_is_actual = new_event_date not in ("Not specified", None, "")`.
+
+- **`backend/api/routes/messages.py`**: Added diagnostic logging when fallback message is triggered, showing `wf_res.action`, `draft_messages` count, and `event_id` for debugging.
+
+---
+
+### Fix: Site Visit Routing from Steps 3 and 4
+
+**Problem:** When an event at Step 3 or 4 had `site_visit_state.status = "proposed"`, client messages would go through normal step processing (including date change detection) instead of routing to Step 7 for site visit handling.
+
+**Changes Made:**
+- **`backend/workflows/steps/step3_room_availability/trigger/step3_handler.py`**: Added site visit check early in `process()` - routes to Step 7 when `site_visit_state.status == "proposed"`
+- **`backend/workflows/steps/step4_offer/trigger/step4_handler.py`**: Added same site visit routing check
+
+---
+
+### Feature: Site Visit Booking Implementation (Phase 1)
+
+**Goal:** Fix site visit date handling so client preferences for visit dates don't trigger event date change detours.
+
+**Problem:** After offer approval, when the manager proposes site visits and the client responds with a date preference like "what about April, preferably on a Wednesday afternoon around 4 pm", the system:
+1. Extracted the April date via LLM
+2. `_detect_structural_change()` saw this differed from `chosen_date` (08.05.2026)
+3. Triggered a detour to Step 2 (date confirmation)
+4. Showed room availability for April instead of site visit options
+
+**Root Cause:** The system didn't distinguish between site visit date preferences (when `site_visit_state.status == "proposed"`) and event date change requests. Additionally, `site_visit_state.status` wasn't being set to "proposed" when the offer was approved and the site visit prompt was shown.
+
+**Changes Made:**
+
+1. **`backend/workflow_email.py`**:
+   - When step 5 (negotiation/offer) is approved, now sets `site_visit_state.status = "proposed"` so subsequent client messages are recognized as site visit context
+
+2. **`backend/workflows/steps/step5_negotiation/trigger/step5_handler.py`**:
+   - Added site visit mode check to `_detect_structural_change()` - skip date detection when `site_visit_state.status == "proposed"`
+   - Added routing to Step 7 when site visit is in progress (status == "proposed")
+
+3. **`backend/workflows/steps/step7_confirmation/trigger/step7_handler.py`**:
+   - Modified `_detect_structural_change()` to skip date change detection when `site_visit_state.status == "proposed"`
+   - Added site visit handling block in `process()` after structural change detection
+   - Added `_extract_site_visit_preference()` - parses time (4 pm → 16:00), weekday (Wednesday → 2), month (April → 4)
+   - Added `_generate_preferred_visit_slots()` - generates slots matching client preference, before event date
+   - Added `_handle_site_visit_preference()` - presents refined slot options to client
+   - Added `_handle_site_visit_confirmation()` - confirms selected slot with direct confirm (no HIL)
+   - Added `_parse_slot_selection()` - parses ordinals (first/second), dates, or generic confirmations
+
+**Database Schema (Supabase-compatible):**
+```python
+"site_visit_state": {
+    "status": "idle|proposed|scheduled|completed|cancelled",
+    "requested_date": "2026-04-15",     # ISO date (client preference)
+    "requested_time": "16:00",          # Time preference
+    "requested_weekday": 2,             # 0-6 Mon-Sun
+    "proposed_slots": [...],            # Generated options
+    "confirmed_date": "2026-04-15",     # Final confirmed date
+    "confirmed_time": "16:00",          # Final confirmed time
+    "notes": None,                      # Optional notes
+}
+```
+
+**Expected Flow (Fixed):**
+```
+Manager: "Let's continue with site visit bookings..."
+Client: "what about april preferably on a wednesday afternoon (around 4 pm)?"
+System: "Here are available times matching your preference:
+         - 15.04.2026 at 16:00
+         - 22.04.2026 at 16:00
+         - 29.04.2026 at 16:00
+         Which would work best for you?"
+Client: "yes please proceed"
+System: "Your site visit is confirmed for 15.04.2026 at 16:00. We look forward to showing you Room E!"
+```
+
+**Files Changed:**
+- `backend/workflow_email.py` (lines 615-622)
+- `backend/workflows/steps/step5_negotiation/trigger/step5_handler.py` (lines 185-203, 543-558)
+- `backend/workflows/steps/step7_confirmation/trigger/step7_handler.py` (lines 120-135, 201-212, 559-815)
+
+**Tests:** 146 passed
+
+---
+
+### Feature: Room Availability Feature-Based Comparison
+
+**Goal:** Enhance room availability comparison to show how room features match client preferences, not just capacity.
+
+**Problem:** Room comparisons only mentioned capacity (e.g., "Room A fits your 60 guests"). They didn't explain WHY a room was recommended based on client-requested features like sound systems, cocktail bars, etc.
+
+**Changes Made:**
+
+1. **`backend/workflows/nlu/preferences.py`** - Enhanced feature matching:
+   - Added `_match_against_features()` function for fuzzy matching against room features/services
+   - Modified `_score_rooms_by_products()` to match client wishes against native room features (sound_system, bar_area, etc.) from rooms.json
+   - Now properly populates `room_match_breakdown.matched/missing` for all client wishes
+
+2. **`backend/workflows/steps/step3_room_availability/trigger/step3_handler.py`** - Added client preferences to snapshot:
+   - Snapshot now includes `client_preferences` with wish_products, keywords, and special_requirements
+   - Info page can now show feature comparison per-room cards
+
+3. **`backend/ux/universal_verbalizer.py`** - Enhanced verbalization:
+   - Updated Step 3 prompt to explicitly use `requirements.matched/missing` data
+   - Modified `_format_facts_for_prompt()` to include matched/missing features per room
+   - LLM now receives context like: `Room A: Available, capacity 40, matched: [sound system, coffee service]`
+
+**Expected Result:**
+- Before: "Room A is available for your 60 guests on 08.05.2026."
+- After: "Room A has everything you asked for - the sound system and coffee service are both included. Room E also has the sound system, though the cocktail bar setup would need to be arranged separately."
+
+**Files Changed:**
+- `backend/workflows/nlu/preferences.py` (added _match_against_features, modified _score_rooms_by_products)
+- `backend/workflows/steps/step3_room_availability/trigger/step3_handler.py` (lines 547-563)
+- `backend/ux/universal_verbalizer.py` (lines 177-204, 585-600)
+
+**Tests:** 146 passed
+
+---
+
+### Fix: Initial Event Inquiries Returning Generic/Wrong Responses
+
+**Problem:** Initial event inquiries with questions (e.g., "Could you confirm availability?") were returning generic fallback messages or hallucinated content like "Room S" (which doesn't exist).
+
+**Root Causes:**
+1. Questions in messages triggered `is_general=True` via heuristic detection (question marks, interrogative patterns)
+2. Step 3 took the Q&A path for initial inquiries instead of showing room availability
+3. Q&A extraction classified inquiries as `qna_subtype: "non_event_info"`
+4. `_execute_query()` had no handler for `non_event_info`, returning empty `db_summary`
+5. Empty data caused LLM verbalizer to hallucinate room names
+
+**Fixes Applied:**
+
+1. **`backend/workflows/qna/engine.py`** - Added fallback for `non_event_info` subtype:
+   - Uses captured context (date/attendees) to query room availability
+   - Falls back to listing all rooms by capacity if no context available
+   - Added helpful notes for users
+
+2. **`backend/workflows/qna/context_builder.py`** - Updated `_resolve_*` functions:
+   - `_resolve_attendees()`: Now uses captured attendees for `non_event_info`
+   - `_resolve_date()`: Now uses captured date for `non_event_info`
+   - `_resolve_room()`: Now uses captured/locked room for `non_event_info`
+
+3. **`backend/workflows/steps/step3_room_availability/trigger/step3_handler.py`** - Skip Q&A for first entry:
+   - Added check for `has_step3_history` (room_pending_decision or audit_log entries)
+   - Initial inquiries now go through normal room availability path, not Q&A
+   - Q&A path reserved for follow-up questions after rooms have been presented
+
+**Files Changed:**
+- `backend/workflows/qna/engine.py` (lines 191-229)
+- `backend/workflows/qna/context_builder.py` (lines 139-143, 238-242, 321-325)
+- `backend/workflows/steps/step3_room_availability/trigger/step3_handler.py` (lines 334-346)
+
+**Tests:** 146 passed
+
+---
+
+### Refactoring: Phase C - Extract Routes from main.py (Continued)
+
+**Task: Modularize main.py by extracting route handlers into separate files**
+
+Continued the Phase C refactoring by extracting route handlers from `backend/main.py` into domain-specific files in `backend/api/routes/`.
+
+**Progress:**
+- **main.py reduced from 2188 → 1573 lines** (28% reduction, 615 lines removed)
+
+**Route Files Created:**
+
+| File | Routes | Lines |
+|------|--------|-------|
+| `tasks.py` | `/api/tasks/*` (pending, approve, reject, cleanup) | ~230 |
+| `events.py` | `/api/events/*`, `/api/event/*/deposit` | ~180 |
+| `config.py` | `/api/config/global-deposit` | ~175 |
+| `clients.py` | `/api/client/reset` | ~135 |
+
+**Structure:**
+```
+backend/api/routes/
+├── __init__.py     # Exports all routers
+├── tasks.py        # HIL task management
+├── events.py       # Event CRUD + deposits
+├── config.py       # Global deposit config
+└── clients.py      # Client reset (testing)
+```
+
+**Still Remaining in main.py (~1573 lines):**
+- Message routes (`/api/send-message`, `/api/start-conversation`, etc.)
+- Debug routes (conditionally loaded)
+- Test data routes (`/api/test-data/*`, `/api/qna`, `/api/snapshots/*`)
+- Workflow routes (`/api/workflow/*`)
+- Helper functions (port management, frontend launch, etc.)
+- App setup and lifecycle
+
+**Tests:** 146 passed
+
+**Commits:**
+- `73cb07f` refactor(api): extract routes from main.py into modular route files
+- `20f7901` refactor(api): extract debug, snapshots, test_data, workflow routes
+
+### Refactoring: Phase C - Extract More Routes from main.py
+
+**Task: Continue route extraction to further modularize main.py**
+
+Extracted 4 more route modules from `backend/main.py`:
+
+**Progress:**
+- **main.py reduced from 1573 → 1170 lines** (26% further reduction)
+- **Total reduction: 2188 → 1170 lines** (47% reduction, 1018 lines removed)
+
+**Additional Route Files Created:**
+
+| File | Routes | Lines |
+|------|--------|-------|
+| `debug.py` | `/api/debug/*` (trace, timeline, report, live logs) | ~190 |
+| `snapshots.py` | `/api/snapshots/*` (get, list, data) | ~60 |
+| `test_data.py` | `/api/test-data/*`, `/api/qna` | ~160 |
+| `workflow.py` | `/api/workflow/*` (health, hil-status) | ~35 |
+
+**Complete Route Structure:**
+```
+backend/api/routes/
+├── __init__.py     # Exports all routers
+├── tasks.py        # HIL task management
+├── events.py       # Event CRUD + deposits
+├── config.py       # Global deposit config
+├── clients.py      # Client reset (testing)
+├── debug.py        # Debug and tracing
+├── snapshots.py    # Snapshot storage
+├── test_data.py    # Test data and Q&A
+└── workflow.py     # Workflow status
+```
+
+**Still Remaining in main.py (~1170 lines):**
+- Message routes (`/api/send-message`, `/api/start-conversation`)
+- Conversation routes (`/api/conversation/*`, `/api/accept-booking`, `/api/reject-booking`)
+- Helper functions (port management, frontend launch)
+- App setup and lifecycle
+
+**Tests:** 146 passed
+
+### Refactoring: Phase C Complete - Message Routes Extracted
+
+**Task: Extract final routes from main.py to complete modularization**
+
+Extracted message/conversation routes to `backend/api/routes/messages.py`:
+
+**Final Progress:**
+- **main.py: 2188 → 468 lines (79% reduction, 1720 lines removed)**
+
+**Final Route Structure:**
+```
+backend/api/routes/
+├── __init__.py     # Exports all routers
+├── tasks.py        # HIL task management (~230 lines)
+├── events.py       # Event CRUD + deposits (~180 lines)
+├── config.py       # Global deposit config (~175 lines)
+├── clients.py      # Client reset (~135 lines)
+├── debug.py        # Debug and tracing (~190 lines)
+├── snapshots.py    # Snapshot storage (~60 lines)
+├── test_data.py    # Test data and Q&A (~160 lines)
+├── workflow.py     # Workflow status (~35 lines)
+└── messages.py     # Message/conversation handling (~700 lines)
+```
+
+**What remains in main.py (~468 lines):**
+- FastAPI app creation and lifespan
+- CORS middleware configuration
+- Router includes (9 routers)
+- Port management functions
+- Frontend launch functions
+- Process cleanup functions
+- Root endpoint
+
+**Tests:** 146 passed
+
+**Commits:**
+- `23e5903` refactor(api): extract message routes from main.py (Phase C complete)
+
+---
+
 ## 2025-12-17
+
+### Fix: Stale negotiation_pending_decision blocking room selection flow
+
+**Bug**: After room selection ("Room B"), system incorrectly showed "sent to manager for approval" instead of generating offer.
+
+**Root cause**: When requirements changed or detours happened (step 5 → step 3), the `negotiation_pending_decision` was not cleared. Step 4 then saw this stale state and returned `offer_waiting_hil` instead of generating a new offer.
+
+**Files fixed**:
+- `backend/workflows/steps/step1_intake/trigger/step1_handler.py:1152-1153` - Clear pending decision when requirements change
+- `backend/workflows/steps/step4_offer/trigger/step4_handler.py:604-606` - Clear pending decision when routing to step 2/3
+- `backend/workflows/steps/step5_negotiation/trigger/step5_handler.py:162-164` - Clear pending decision when structural change detours to step 2/3
+
+**Tests**: 146 passed
+
+---
 
 ### Refactoring: AI Agent Optimization - Phase D (Error Handling)
 

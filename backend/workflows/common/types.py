@@ -18,10 +18,15 @@ class IncomingMessage:
     subject: Optional[str]
     body: Optional[str]
     ts: Optional[str]
+    extras: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "IncomingMessage":
         """[Trigger] Build an IncomingMessage from a raw dict payload."""
+
+        # Extract known fields
+        known_keys = {"msg_id", "from_name", "from_email", "subject", "body", "ts"}
+        extras = {k: v for k, v in payload.items() if k not in known_keys}
 
         return cls(
             msg_id=payload.get("msg_id"),
@@ -30,6 +35,7 @@ class IncomingMessage:
             subject=payload.get("subject"),
             body=payload.get("body"),
             ts=payload.get("ts"),
+            extras=extras,
         )
 
     def to_payload(self) -> Dict[str, Optional[str]]:

@@ -10,7 +10,7 @@ from backend.detection.intent.confidence import (
     is_gibberish,
     CONFIDENCE_NONSENSE,
 )
-from backend.workflows.groups import negotiation_close
+from backend.workflows.steps import step5_negotiation as negotiation_close
 
 
 class DummyState:

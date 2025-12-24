@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, validator
 
-from backend.workflows.groups.room_availability.condition.decide import room_status_on_date
-from backend.workflows.groups.room_availability.trigger.process import (
+from backend.workflows.steps.step3_room_availability.condition.decide import room_status_on_date
+from backend.workflows.steps.step3_room_availability.trigger.process import (
     evaluate_room_statuses,
     _flatten_statuses,  # type: ignore
     ROOM_OUTCOME_AVAILABLE,

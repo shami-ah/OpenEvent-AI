@@ -133,8 +133,13 @@ def _resolve_attendees(
         "product_catalog",
         "product_truth",
         "repertoire_check",
-        "non_event_info",
     }:
+        return EffectiveVariable(value=None, source="UNUSED"), None
+
+    # non_event_info: use captured state if available (enables fallback room queries)
+    if subtype == "non_event_info":
+        if captured is not None:
+            return EffectiveVariable(value=captured, source="C", meta={"fallback": True}), None
         return EffectiveVariable(value=None, source="UNUSED"), None
 
     if subtype in {"catalog_by_capacity", "room_catalog_with_products"}:
@@ -226,9 +231,14 @@ def _resolve_date(
         "product_catalog",
         "product_truth",
         "product_recommendation_for_us",
-        "non_event_info",
         "update_candidate",
     }:
+        return EffectiveVariable(value=None, source="UNUSED"), None
+
+    # non_event_info: use captured date if available (enables fallback room queries)
+    if subtype == "non_event_info":
+        if captured_date:
+            return EffectiveVariable(value=captured_date, source="C", meta={"fallback": True}), None
         return EffectiveVariable(value=None, source="UNUSED"), None
 
     if subtype == "repertoire_check":
@@ -305,8 +315,13 @@ def _resolve_room(
         "product_truth",
         "product_recommendation_for_us",
         "repertoire_check",
-        "non_event_info",
     }:
+        return EffectiveVariable(value=None, source="UNUSED"), None
+
+    # non_event_info: use captured room if available (enables fallback room queries)
+    if subtype == "non_event_info":
+        if captured_room:
+            return EffectiveVariable(value=captured_room, source="C", meta={"fallback": True}), None
         return EffectiveVariable(value=None, source="UNUSED"), None
 
     if subtype == "room_capacity_delta":

@@ -244,7 +244,7 @@ def list_free_dates(
     preferred = preferred_room or "Room A"
     if db is not None:
         try:
-            from backend.workflows.groups.intake.condition.checks import suggest_dates
+            from backend.workflows.steps.step1_intake.condition.checks import suggest_dates
         except Exception:
             suggest_dates = None  # type: ignore
         if suggest_dates is not None:
