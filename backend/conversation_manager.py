@@ -16,7 +16,7 @@ from backend.domain import ConversationState, EventInformation, IntentLabel
 from backend.utils.openai_key import load_openai_api_key
 from backend.workflow_email import DB_PATH as WF_DB_PATH, load_db as wf_load_db, save_db as wf_save_db
 from backend.workflows.common.types import IncomingMessage, WorkflowState
-from backend.workflows.groups.room_availability.trigger import process as step3_process
+from backend.workflows.steps.step3_room_availability.trigger import process as step3_process
 
 load_dotenv(override=False)
 

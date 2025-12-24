@@ -43,7 +43,7 @@ from backend.utils.profiler import profile_step
 from backend.utils.pseudolinks import generate_room_details_link, generate_qna_link
 from backend.utils.page_snapshots import create_snapshot
 from backend.workflow_verbalizer_test_hooks import render_rooms
-from backend.workflows.groups.room_availability.db_pers import load_rooms_config
+from backend.workflows.steps.step3_room_availability.db_pers import load_rooms_config
 from backend.workflows.nlu import detect_general_room_query, detect_sequential_workflow_request
 from backend.rooms import rank as rank_rooms_profiles
 
@@ -1169,6 +1169,7 @@ def _extract_participants(requirements: Dict[str, Any]) -> Optional[int]:
 def _room_requirements_payload(entry: RankedRoom) -> Dict[str, List[str]]:
     return {
         "matched": list(entry.matched),
+        "closest": list(entry.closest),  # Moderate matches with context
         "missing": list(entry.missing),
     }
 
@@ -1179,6 +1180,12 @@ def _derive_hint(entry: Optional[RankedRoom], preferences: Optional[Dict[str, An
     matched = [item for item in entry.matched if item]
     if matched:
         return ", ".join(matched[:3])
+    # Show closest matches (partial/similar products) if no exact matches
+    closest = [item for item in entry.closest if item]
+    if closest:
+        # Extract just the product name from "Classic Apéro (closest to dinner)" format
+        clean_closest = [item.split(" (closest")[0] for item in closest]
+        return ", ".join(clean_closest[:3])
     if explicit:
         missing = [item for item in entry.missing if item]
         if missing:
@@ -1244,6 +1251,7 @@ def _verbalizer_rooms_payload(
                 },
                 "requirements": {
                     "matched": list(entry.matched),
+                    "closest": list(entry.closest),  # Partial matches with context
                     "missing": list(entry.missing),
                 },
                 "hint": hint_label,

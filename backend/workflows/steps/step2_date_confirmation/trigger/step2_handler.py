@@ -65,9 +65,9 @@ from backend.workflows.qna.router import route_general_qna
 from backend.workflows.common.types import GroupResult, WorkflowState
 # MIGRATED: from backend.workflows.common.confidence -> backend.detection.intent.confidence
 from backend.detection.intent.confidence import check_nonsense_gate
-from backend.workflows.groups.intake.condition.checks import suggest_dates
+from backend.workflows.steps.step1_intake.condition.checks import suggest_dates
 from backend.workflows.common.relative_dates import resolve_relative_date
-from backend.workflows.groups.room_availability.condition.decide import room_status_on_date
+from backend.workflows.steps.step3_room_availability.condition.decide import room_status_on_date
 from backend.workflows.io.dates import next5
 from backend.workflows.io.database import (
     append_audit_entry,
@@ -2468,7 +2468,7 @@ def _finalize_confirmation(
     autorun_error: Optional[Dict[str, Any]] = None
     if next_step == 3:
         try:
-            from backend.workflows.groups.room_availability.trigger.process import process as room_process
+            from backend.workflows.steps.step3_room_availability.trigger.process import process as room_process
 
             room_result = room_process(state)
             if isinstance(room_result.payload, dict):

@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 from backend.workflows.conditions.checks import has_event_date as _has_event_date
 from backend.workflows.conditions.checks import is_event_request as _is_event_request
-from backend.workflows.groups.room_availability.condition.decide import (
+from backend.workflows.steps.step3_room_availability.condition.decide import (
     room_status_on_date as _room_status_on_date,
 )
 

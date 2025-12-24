@@ -18,6 +18,17 @@ from backend.workflows.steps.step5_negotiation import (
     _handle_accept,
     _offer_summary_lines,
     _apply_hil_negotiation_decision,
+    _classify_message,
+    _ask_classification_clarification,
+    update_event_metadata,
 )
 
-__all__ = ["process", "_handle_accept", "_offer_summary_lines", "_apply_hil_negotiation_decision"]
+__all__ = [
+    "process",
+    "_handle_accept",
+    "_offer_summary_lines",
+    "_apply_hil_negotiation_decision",
+    "_classify_message",
+    "_ask_classification_clarification",
+    "update_event_metadata",
+]

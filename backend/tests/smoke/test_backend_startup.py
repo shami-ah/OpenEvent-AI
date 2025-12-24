@@ -51,17 +51,17 @@ class TestBackendImports:
 
     def test_import_date_confirmation(self):
         """Date confirmation process should import."""
-        from backend.workflows.groups.date_confirmation.trigger.process import process
+        from backend.workflows.steps.step2_date_confirmation.trigger.process import process
         assert callable(process)
 
     def test_import_room_availability(self):
         """Room availability process should import."""
-        from backend.workflows.groups.room_availability.trigger.process import process
+        from backend.workflows.steps.step3_room_availability.trigger.process import process
         assert callable(process)
 
     def test_import_intake(self):
         """Intake process should import."""
-        from backend.workflows.groups.intake.trigger.process import process
+        from backend.workflows.steps.step1_intake.trigger.process import process
         assert callable(process)
 
 

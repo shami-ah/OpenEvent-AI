@@ -26,16 +26,16 @@ from pydantic import BaseModel
 from backend.domain import ConversationState, EventInformation
 from backend.conversation_manager import (
     active_conversations,
-    extract_information_incremental,
     render_step3_reply,
     pop_step3_payload,
 )
+from backend.core.fallback import wrap_fallback, create_fallback_context
 from backend.adapters.calendar_adapter import get_calendar_adapter
 from backend.adapters.client_gui_adapter import ClientGUIAdapter
 from backend.workflows.common.payloads import PayloadValidationError, validate_confirm_date_payload
-from backend.workflows.groups.date_confirmation import compose_date_confirmation_reply
+from backend.workflows.steps.step2_date_confirmation import compose_date_confirmation_reply
 from backend.workflows.common.prompts import append_footer
-from backend.workflows.groups.room_availability import run_availability_workflow
+from backend.workflows.steps.step3_room_availability import run_availability_workflow
 from backend.utils import json_io
 from backend.workflow_email import (
     process_msg as wf_process_msg,
@@ -527,7 +527,21 @@ async def start_conversation(request: StartConversationRequest):
         print(f"[WF][FALLBACK_DIAGNOSTIC] wf_res.draft_messages count={len(wf_res.get('draft_messages') or [])}")
         print(f"[WF][FALLBACK_DIAGNOSTIC] wf_res.assistant_message={bool(wf_res.get('assistant_message'))}")
         print(f"[WF][FALLBACK_DIAGNOSTIC] wf_res.event_id={wf_res.get('event_id')}")
-        assistant_reply = "Thanks for your message. I'll follow up shortly with availability details."
+
+        # Create diagnostic fallback context
+        fallback_ctx = create_fallback_context(
+            source="api.routes.messages.start_conversation",
+            trigger="empty_workflow_reply",
+            event_id=wf_res.get("event_id"),
+            thread_id=session_id,
+            action=wf_res.get("action"),
+            draft_count=len(wf_res.get("draft_messages") or []),
+            has_assistant_msg=bool(wf_res.get("assistant_message")),
+        )
+        assistant_reply = wrap_fallback(
+            "Thanks for your message. I'll follow up shortly with availability details.",
+            fallback_ctx
+        )
 
     conversation_state.event_id = wf_res.get("event_id") or event_id
     conversation_state.event_info = _update_event_info_from_db(conversation_state.event_info, conversation_state.event_id)
@@ -555,13 +569,10 @@ async def send_message(request: SendMessageRequest):
 
     conversation_state = active_conversations[request.session_id]
 
-    try:
-        conversation_state.event_info = extract_information_incremental(
-            request.message,
-            conversation_state.event_info,
-        )
-    except Exception as exc:
-        print(f"[WF][WARN] incremental extraction failed: {exc}")
+    # NOTE: Removed redundant extract_information_incremental() call (Dec 2025)
+    # It was making a separate gpt-4o-mini API call that updated in-memory state
+    # but didn't persist to the workflow database. The workflow's own detection
+    # in step1_handler.py handles all entity extraction properly.
 
     conversation_state.conversation_history.append({"role": "user", "content": request.message})
 
@@ -582,7 +593,20 @@ async def send_message(request: SendMessageRequest):
         print(f"[WF][ERROR] send_message workflow failed: {exc}")
         import traceback
         traceback.print_exc()
-        assistant_reply = "Thanks for the update. I'll follow up shortly with the latest availability."
+
+        # Create diagnostic fallback context for workflow exception
+        fallback_ctx = create_fallback_context(
+            source="api.routes.messages.send_message",
+            trigger="workflow_exception",
+            thread_id=request.session_id,
+            event_id=conversation_state.event_id,
+            error=exc,
+            message_preview=request.message[:50] if request.message else None,
+        )
+        assistant_reply = wrap_fallback(
+            "Thanks for the update. I'll follow up shortly with the latest availability.",
+            fallback_ctx
+        )
         conversation_state.conversation_history.append({"role": "assistant", "content": assistant_reply})
         return {
             "session_id": request.session_id,
@@ -639,7 +663,21 @@ async def send_message(request: SendMessageRequest):
     res_meta = wf_res.get("res") or {}
     hil_pending = res_meta.get("pending_hil_approval", False)
     if not assistant_reply and not hil_pending:
-        assistant_reply = "Thanks for the update. I'll keep you posted as I gather the details."
+        # Create diagnostic fallback context for empty workflow reply
+        fallback_ctx = create_fallback_context(
+            source="api.routes.messages.send_message",
+            trigger="empty_workflow_reply",
+            thread_id=request.session_id,
+            event_id=wf_res.get("event_id") or conversation_state.event_id,
+            action=wf_res.get("action"),
+            draft_count=len(wf_res.get("draft_messages") or []),
+            has_assistant_msg=bool(wf_res.get("assistant_message")),
+            current_step=wf_res.get("current_step"),
+        )
+        assistant_reply = wrap_fallback(
+            "Thanks for the update. I'll keep you posted as I gather the details.",
+            fallback_ctx
+        )
 
     # Only apply step3_payload override if HIL is NOT pending
     if not hil_pending:

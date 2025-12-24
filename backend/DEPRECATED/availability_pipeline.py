@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from backend.workflow_email import process_msg as wf_process_msg
-from backend.workflows.groups.room_availability import run_availability_workflow as advanced_run
+from backend.workflows.steps.step3_room_availability import run_availability_workflow as advanced_run
 
 
 def process_email(

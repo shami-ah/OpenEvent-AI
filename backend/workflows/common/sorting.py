@@ -15,12 +15,13 @@ class RankedRoom:
     score: float
     hint: str
     capacity_ok: bool
-    matched: List[str] = field(default_factory=list)
+    matched: List[str] = field(default_factory=list)  # Strong matches (>= 85%)
+    closest: List[str] = field(default_factory=list)  # Moderate matches (65-85%)
     missing: List[str] = field(default_factory=list)
 
 
 def _config_by_name() -> Dict[str, Dict[str, object]]:
-    from backend.workflows.groups.room_availability.db_pers import load_rooms_config
+    from backend.workflows.steps.step3_room_availability.db_pers import load_rooms_config
 
     rooms = load_rooms_config()
     return {str(entry.get("name")): entry for entry in rooms if entry.get("name")}
@@ -104,12 +105,19 @@ def rank_rooms(
         preference_value += similarity_score
         preferred_bonus = 10.0 if room.strip().lower() == preferred_lower else 0.0
         matched_items: List[str] = []
+        closest_items: List[str] = []
         missing_items: List[str] = []
         match_info = match_breakdown.get(room) if match_breakdown else None
         if isinstance(match_info, dict):
             matched_items = [item for item in match_info.get("matched", []) if isinstance(item, str) and item.strip()]
+            closest_items = [item for item in match_info.get("closest", []) if isinstance(item, str) and item.strip()]
             missing_items = [item for item in match_info.get("missing", []) if isinstance(item, str) and item.strip()]
-        hint = matched_items[0] if matched_items else (wish_products[0] if wish_products else hints_default)
+        # Hint: prefer matched, then closest (without the context suffix), then wish_products
+        hint = matched_items[0] if matched_items else (
+            closest_items[0].split(" (closest")[0] if closest_items else (
+                wish_products[0] if wish_products else hints_default
+            )
+        )
         capacity_ok = capacity_value >= 30.0
         total = status_score + capacity_value + preference_value + preferred_bonus
         ranked.append(
@@ -120,6 +128,7 @@ def rank_rooms(
                 hint=hint,
                 capacity_ok=capacity_ok,
                 matched=matched_items,
+                closest=closest_items,
                 missing=missing_items,
             )
         )

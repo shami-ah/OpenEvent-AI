@@ -4,11 +4,11 @@
 
 - **Mainline runtime:** `backend/main.py` (FastAPI app for chat + GUI buttons)
 - **DB + glue:** `backend/workflow_email.py` (reads/writes `events_database.json`)
-- **Room Availability step:** `backend/availability_pipeline.py`
+- **Room Availability step:** `backend/workflows/groups/room_availability` (Orchestrated by workflow engine)
 - **Adapters:**
-  - `backend/calendar_adapter.py` (reads busy slots from `backend/calendar_data/*.json`)
-  - `backend/client_gui_adapter.py` (stub: prints the card we “publish” to the Client GUI)
-- **Configs/data:** `backend/rooms.json`, `backend/calendar_data/`, `backend/events_database.json`
+  - `backend/adapters/calendar_adapter.py` (reads busy slots from `backend/adapters/calendar_data/*.json`)
+  - `backend/adapters/client_gui_adapter.py` (stub: prints the card we “publish” to the Client GUI)
+- **Configs/data:** `backend/rooms.json`, `backend/adapters/calendar_data/`, `backend/events_database.json`
 
 ## Prerequisites
 
@@ -40,14 +40,16 @@ npm run dev
 ## Quick repo layout (for bearings)
 ```
 backend/
-  availability_pipeline.py   # Room Availability + Human approval + Publish-to-GUI
-  calendar_adapter.py        # reads busy slots from backend/calendar_data/*.json
-  client_gui_adapter.py      # stub that prints the GUI card payload
+  adapters/                  # Calendar, GUI, and other adapters
+    calendar_adapter.py      # reads busy slots
+    client_gui_adapter.py    # stub for GUI payload
+    calendar_data/           # Put busy fixtures here
   main.py                    # FastAPI app (chat + buttons); triggers pipeline after date confirm
   workflow_email.py          # DB helpers for events_database.json
   events_database.json       # persistent store (auto-updated)
   rooms.json                 # Room capacities, buffers, calendar_id
-  calendar_data/             # Put busy fixtures here (one file per room calendar_id)
+  workflows/                 # Business Logic
+    groups/                  # Step implementations (intake, offer, etc.)
 ```
 
 ## End-to-end test (recommended happy path)
@@ -66,7 +68,7 @@ backend/
 - `main.py` detects the confirmation → `_persist_confirmed_date(...)`
 - The workflow DB is updated via `workflow_email.py` and an `event_id` is stored on the conversation.
 - `main.py` calls `_trigger_room_availability(...)`.
-- `availability_pipeline.py`:
+- The availability logic (in `backend/workflows/groups/room_availability`):
   - computes availability (buffers + conflicts + near-miss ±30/60/90 min),
   - drafts the correct reply (Available / Option / Unavailable),
   - prompts in the terminal (`[E]dit / [A]pprove & Publish / [C]ancel`),
@@ -83,16 +85,16 @@ And in `backend/events_database.json`:
 
 ## Setting up calendar conflicts (to test each bubble)
 
-Place busy files in `backend/calendar_data/`, named after each room’s `calendar_id` from `rooms.json`.
+Place busy files in `backend/adapters/calendar_data/`, named after each room’s `calendar_id` from `rooms.json`.
 
 **Example 1 — Preferred busy (forces Alternative → Available)**
 ```
-backend/calendar_data/atelier-room-b.json
+backend/adapters/calendar_data/atelier-room-b.json
 { "busy": [
   {"start":"2025-10-16T13:45:00+02:00","end":"2025-10-16T16:30:00+02:00"}
 ]}
 
-backend/calendar_data/atelier-room-a.json
+backend/adapters/calendar_data/atelier-room-a.json
 { "busy": [] }
 ```
 Run the flow → expect **Available** (alternative chosen), status becomes `Availability Assessed`.
@@ -105,12 +107,15 @@ Run → expect **Option** with up to 3 bullet suggestions, status `Availability 
 Make A/B/C busy across the whole window ± buffers.  
 Run → expect **Unavailable** asking for alternative dates, status `Availability Constraints`.
 
-## Manual run (dev shortcut)
+## Manual run
 
-If you already know the `event_id` and the status is `Date Confirmed`, run:
-```bash
-python -B backend/availability_pipeline.py <EVENT_ID>
-```
+The standalone `availability_pipeline.py` script is deprecated. To test the flow:
+
+1.  **Use the Dev Server/UI:** Run the full stack and verify the flow in the frontend.
+2.  **Run Tests:** Use pytest to run specific flow tests:
+    ```bash
+    pytest backend/tests/flow/test_room_conflict.py
+    ```
 
 ## What if Start/End Time is missing?
 
@@ -128,7 +133,7 @@ Confirming the same date again will not re-run availability.
 
 - `.pyc` permission denied (macOS) → run with `python -B` or set `PYTHONDONTWRITEBYTECODE=1`.
 - No CLI approval prompt → the pipeline runs **after** the date is confirmed; ensure confirmation happened.
-- No conflicts detected → add files under `backend/calendar_data/<calendar_id>.json`. Missing files mean “free”.
+- No conflicts detected → add files under `backend/adapters/calendar_data/<calendar_id>.json`. Missing files mean “free”.
 - Wrong date format → the chat uses `DD.MM.YYYY`; system normalizes internally to ISO.
 
 ## Next steps in the workflow (after this)

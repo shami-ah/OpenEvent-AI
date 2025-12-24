@@ -17,10 +17,10 @@ from backend.workflows.common.timeutils import format_iso_date_to_ddmmyyyy
 from backend.workflows.common.types import GroupResult, WorkflowState
 from backend.workflows.common.datetime_parse import build_window_iso
 import importlib
-from backend.workflows.groups.intake.condition.checks import suggest_dates
+from backend.workflows.steps.step1_intake.condition.checks import suggest_dates
 from backend.config.flags import env_flag
 
-date_process_module = importlib.import_module("backend.workflows.groups.date_confirmation.trigger.process")
+date_process_module = importlib.import_module("backend.workflows.steps.step2_date_confirmation.trigger.process")
 ConfirmationWindow = getattr(date_process_module, "ConfirmationWindow")
 from backend.workflows.io.database import append_audit_entry, update_event_metadata
 from backend.services.products import normalise_product_payload
@@ -318,6 +318,13 @@ def _shortcuts_allowed(event_entry: Dict[str, Any]) -> bool:
             current_step = 0
     if current_step < 3:
         return False
+
+    # [BILLING FLOW BYPASS] Don't intercept messages during billing capture flow
+    # When offer is accepted and we're awaiting billing, let step 5 handle the message
+    if event_entry.get("offer_accepted"):
+        billing_req = event_entry.get("billing_requirements") or {}
+        if billing_req.get("awaiting_billing_for_accept"):
+            return False
 
     if event_entry.get("date_confirmed") is not True:
         return False

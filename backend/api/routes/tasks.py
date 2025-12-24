@@ -96,7 +96,7 @@ def _build_event_summary(event_entry: Dict[str, Any]) -> Optional[Dict[str, Any]
 
     # Calculate offer total
     try:
-        from backend.workflows.groups.negotiation_close import _determine_offer_total
+        from backend.workflows.steps.step5_negotiation.trigger.step5_handler import _determine_offer_total
         total_amount = _determine_offer_total(event_entry)
     except Exception:
         total_amount = None

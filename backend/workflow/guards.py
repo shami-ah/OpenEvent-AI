@@ -8,7 +8,7 @@ from backend.workflow.state import WorkflowStep, write_stage
 from backend.workflows.common.requirements import requirements_hash
 from backend.workflows.common.timeutils import format_iso_date_to_ddmmyyyy
 from backend.workflows.common.datetime_parse import to_iso_date
-from backend.workflows.groups.intake.condition.checks import suggest_dates
+from backend.workflows.steps.step1_intake.condition.checks import suggest_dates
 from backend.workflows.io.database import update_event_metadata
 
 if TYPE_CHECKING:
@@ -71,6 +71,28 @@ def evaluate(state: "WorkflowState") -> GuardSnapshot:
     """
 
     event_entry = state.event_entry or {}
+
+    # [DEPOSIT PAYMENT BYPASS] When deposit is just paid and offer was accepted,
+    # skip guard-forced step changes so workflow proceeds to step 5.
+    # We always route to step 5 (even if gate not ready) because step 5 has the
+    # confirmation gate logic to check billing/deposit and generate appropriate responses.
+    is_deposit_signal = (state.message.extras or {}).get("deposit_just_paid", False)
+    if is_deposit_signal and event_entry.get("offer_accepted"):
+        # Ensure step is 5 for negotiation handler to process confirmation gate
+        if event_entry.get("current_step") != 5:
+            update_event_metadata(event_entry, current_step=5)
+            state.current_step = 5
+            state.extras["persist"] = True
+        # Return early with no forced steps
+        return GuardSnapshot(
+            step2_required=False,
+            step3_required=False,
+            step4_required=False,
+            requirements_hash=event_entry.get("requirements_hash"),
+            room_eval_hash=event_entry.get("room_eval_hash"),
+            chosen_date=_normalize_date(event_entry.get("chosen_date")),
+            candidate_dates=[],
+        )
     user_info = state.user_info or {}
 
     chosen_date = event_entry.get("chosen_date")

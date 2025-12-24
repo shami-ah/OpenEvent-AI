@@ -118,7 +118,7 @@ def test_room_selection_uses_catalog(monkeypatch):
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        "backend.workflows.nlu.semantic_matchers.load_room_catalog",
+        "backend.detection.response.matchers.load_room_catalog",
         lambda: [SimpleNamespace(name="Panorama Hall", room_id="PAN1")],
     )
     _room_patterns_from_catalog.cache_clear()

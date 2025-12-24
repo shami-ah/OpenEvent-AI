@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from backend.utils import json_io
-from backend.workflows.groups.room_availability.db_pers import load_rooms_config
+from backend.workflows.steps.step3_room_availability.db_pers import load_rooms_config
 
 
 # ---------------------------------------------------------------------------

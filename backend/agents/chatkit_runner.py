@@ -741,9 +741,10 @@ async def run_streamed(thread_id: str, message: Dict[str, Any], state: Dict[str,
         allowed_tools = [{"type": "function", "function": {"name": tool}} for tool in policy.allowed_tools]
         stop_tools = [{"type": "function", "function": {"name": tool}} for tool in CLIENT_STOP_AT_TOOLS]
         system_instructions = (
-            "You are OpenEvent, an empathetic venue assistant. Follow Workflow v3 strictly.\n"
+            "You are OpenEvent's professional event manager for The Atelier. Follow Workflow v3 strictly.\n"
             f"Current step: {state.get('current_step') or 'unknown'}; "
             f"Status: {state.get('status') or 'Lead'}.\n"
+            "Communicate concisely and professionally. No marketing fluff.\n"
             "Only invoke engine tools that appear in the provided allowlist. "
             "Client tools (confirm/change/discard offer, see catering/products) must use StopAtTools."
         )

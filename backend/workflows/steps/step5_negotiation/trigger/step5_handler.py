@@ -32,6 +32,7 @@ from backend.workflows.common.general_qna import append_general_qna_to_primary, 
 from backend.workflows.qna.engine import build_structured_qna_result
 from backend.workflows.qna.extraction import ensure_qna_extraction
 from backend.workflows.io.database import append_audit_entry, update_event_metadata
+from backend.workflows.io import database as db_io
 from backend.workflows.io.tasks import enqueue_task, update_task_status
 from backend.workflows.nlu import detect_general_room_query
 # MIGRATED: from backend.workflows.nlu.semantic_matchers -> backend.detection.response.matchers
@@ -138,14 +139,42 @@ def process(state: WorkflowState) -> GroupResult:
     if merge_client_profile(event_entry, state.user_info or {}):
         state.extras["persist"] = True
 
-    if (event_entry.get("billing_requirements") or {}).get("awaiting_billing_for_accept"):
-        message_text = (state.message.body or "").strip()
-        if message_text:
-            event_entry.setdefault("event_data", {})["Billing Address"] = message_text
-            state.extras["persist"] = True
+    billing_req = event_entry.get("billing_requirements") or {}
+    print(f"[Step5][DEBUG] awaiting_billing_for_accept={billing_req.get('awaiting_billing_for_accept')}")
+    if billing_req.get("awaiting_billing_for_accept"):
+        # Skip billing capture for synthetic deposit payment messages
+        # (their body is "I have paid the deposit." which would corrupt billing)
+        is_deposit_signal = (state.message.extras or {}).get("deposit_just_paid", False)
+        print(f"[Step5][DEBUG] is_deposit_signal={is_deposit_signal}")
+        if not is_deposit_signal:
+            message_text = (state.message.body or "").strip()
+            print(f"[Step5][DEBUG] message_text={repr(message_text[:100] if message_text else '')}")
+            if message_text:
+                event_entry.setdefault("event_data", {})["Billing Address"] = message_text
+                state.extras["persist"] = True
+                print(f"[Step5][DEBUG] ✅ Captured billing address: {message_text[:50]}...")
+                # FORCE SAVE: Ensure billing is persisted immediately
+                # This fixes the bug where deferred persistence wasn't saving billing
+                try:
+                    db_io.save_db(state.db, state.db_path)
+                    print(f"[Step5][DEBUG] ✅ FORCE SAVED billing to database")
+                except Exception as save_err:
+                    print(f"[Step5][ERROR] Failed to force save billing: {save_err}")
 
     billing_missing = _refresh_billing(event_entry)
     state.extras["persist"] = True
+    # FORCE SAVE after billing refresh to ensure billing_details is persisted
+    try:
+        db_io.save_db(state.db, state.db_path)
+        print(f"[Step5][DEBUG] ✅ FORCE SAVED after billing refresh (billing_missing={billing_missing})")
+    except Exception as save_err:
+        print(f"[Step5][ERROR] Failed to save after billing refresh: {save_err}")
+
+    # Clear awaiting_billing_for_accept once billing is complete
+    if not billing_missing and billing_req.get("awaiting_billing_for_accept"):
+        billing_req["awaiting_billing_for_accept"] = False
+        billing_req["last_missing"] = []
+        state.extras["persist"] = True
 
     # -------------------------------------------------------------------------
     # UNIFIED CONFIRMATION GATE: Order-independent check for all prerequisites
@@ -633,6 +662,17 @@ def _detect_structural_change(
     event_entry: Dict[str, Any],
     message_text: str = "",
 ) -> Optional[tuple[int, str]]:
+    # -------------------------------------------------------------------------
+    # ACCEPTANCE GUARD: Skip change detection for acceptance messages
+    # LLM extraction may produce false positive "room" values from acceptance
+    # messages like "I accept" which should NOT trigger room change detection.
+    # -------------------------------------------------------------------------
+    if message_text:
+        is_acceptance, confidence, _ = matches_acceptance_pattern(message_text.lower())
+        if is_acceptance and confidence >= 0.7:
+            # Message looks like an acceptance - skip all change detection
+            return None
+
     # Skip date change detection when in site visit mode
     # Dates mentioned are for the site visit, not event date changes
     visit_state = event_entry.get("site_visit_state") or {}
