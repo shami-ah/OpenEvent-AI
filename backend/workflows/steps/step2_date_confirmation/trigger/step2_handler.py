@@ -467,6 +467,8 @@ def process(state: WorkflowState) -> GroupResult:
             append_audit_entry(event_entry, 2, decision.next_step, f"{change_type.value}_change_detected")
 
             # Skip Q&A: return detour signal
+            # CRITICAL: Update event_entry BEFORE state.current_step so routing loop sees the change
+            update_event_metadata(event_entry, current_step=decision.next_step)
             state.current_step = decision.next_step
             state.set_thread_state("In Progress")
             state.extras["persist"] = True
@@ -1031,24 +1033,23 @@ def _present_candidate_dates(
             source_message_id=state.message.msg_id,
         )
         event_entry["pending_future_confirmation"] = _window_payload(pending_window)
-        message_lines.append("Thanks for the briefing — here are the next available slots that fit your preferred window.")
+        # Don't add redundant phrases - the date suggestion above is sufficient
     elif reason:
+        # Simplified: just state the issue briefly, then move to suggestions
         message_lines.append(_preface_with_apology(reason) or reason)
-        message_lines.append("I know that makes planning trickier—I'm checking a wider range of dates for you now.")
-        if attempt > 1:
-            message_lines.append("I've widened the search to include a broader range of upcoming dates as well.")
-        message_lines.append("Thanks for the briefing — here are the next available slots that fit your preferred window.")
+        message_lines.append("Here are some alternatives that might work:")
     else:
         if attempt > 1:
-            message_lines.append("I've expanded the search window so you get a fresh set of date options that might work better.")
+            message_lines.append("Let me show you some fresh options:")
         else:
-            message_lines.append("Thanks for the briefing — here are the next available slots that fit your preferred window.")
+            message_lines.append("Here are some available dates:")
 
     if unavailable_requested:
         unavailable_display = _format_display_dates(unavailable_requested)
         joined = _human_join(unavailable_display)
-        message_lines.append(f"Sorry, we don't have free rooms on {joined}.")
-        message_lines.append("What about one of the nearby options below?")
+        # More natural phrasing
+        message_lines.append(f"Unfortunately {joined} {'is' if len(unavailable_requested) == 1 else 'are'} not available.")
+        message_lines.append("Would any of these work instead?")
     if weekday_shortfall and formatted_dates:
         message_lines.append(
             "I couldn't find a free Thursday or Friday in that range—these are the closest available slots right now."
