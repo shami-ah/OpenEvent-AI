@@ -591,6 +591,34 @@ The billing capture code at `step5_handler.py:179-182` was positioned AFTER the 
 
 **Verified:** E2E test confirms "Here are our catering packages" response instead of room availability
 
+### General Q&A Falls Back to Structured Format (Open - 2025-12-29)
+**Symptoms:** When asking general questions like "What's included with the room rental?", "Do you have parking?", "What's your cancellation policy?", or "Do you have WiFi?", the system returns a generic structured response instead of actually answering the question.
+
+**Observed Behavior:**
+- Questions are detected as Q&A (classification works)
+- However, response falls back to structured format showing event details (date, attendees, room, price)
+- The actual question is not answered
+
+**Example Response (Wrong):**
+```
+- Event Date: **June 1, 2026**
+- Number of Attendees: **100**
+- Room: **Room B**
+- Price: Not specified
+```
+
+**Expected Behavior:**
+- General questions should be routed to the appropriate Q&A handler
+- Room inclusions, parking, WiFi, cancellation policy should return relevant information
+
+**Root Cause (Suspected):**
+- Q&A routing in Step 3 may not be handling non-catering general questions
+- The `build_structured_qna_result` function may be used instead of proper Q&A handlers
+
+**Priority:** Medium - UX issue, not a workflow blocker
+
+**Investigation Needed:** Check Q&A routing in `step3_handler.py` and `general_qna.py` for how non-catering questions are handled.
+
 ### Room choice repeats / manual-review detours (Ongoing Fix)
 **Symptoms:** After a client types a room name (e.g., “Room E”), the workflow dropped back to Step 3, showed another room list, or enqueued manual review; sometimes the room label was mistaken for a billing address (“Billing Address: Room E”).
 
