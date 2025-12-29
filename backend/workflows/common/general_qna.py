@@ -1601,6 +1601,81 @@ def present_general_room_qna(
     body = (message.body if message else "") or ""
     message_text = f"{subject}\n{body}".strip() or body or subject
 
+    # -------------------------------------------------------------------------
+    # CATERING/PRODUCT Q&A ROUTING FIX
+    # Check if this is a catering or product question based on classification
+    # secondary types. Route to route_general_qna for proper handling.
+    # -------------------------------------------------------------------------
+    secondary_types = classification.get("secondary") or []
+    catering_types = {"catering_for", "products_for"}
+    is_catering_question = bool(set(secondary_types) & catering_types)
+
+    if is_catering_question:
+        # Use route_general_qna for catering/product questions - it has proper handling
+        msg_payload = {
+            "subject": subject,
+            "body": body,
+            "thread_id": thread_id or state.thread_id,
+            "msg_id": message.msg_id if message else "",
+        }
+        qna_result = route_general_qna(
+            msg_payload,
+            event_entry,
+            event_entry,
+            state.db,
+            classification,
+        )
+        # Build response from route_general_qna result
+        post_blocks = qna_result.get("post_step") or []
+        pre_blocks = qna_result.get("pre_step") or []
+        all_blocks = pre_blocks + post_blocks
+
+        if all_blocks:
+            first_block = all_blocks[0]
+            body_markdown = first_block.get("body", "")
+            topic = first_block.get("topic", "catering_for")
+            footer_body = append_footer(
+                body_markdown,
+                step=step_number,
+                next_step=step_number,
+                thread_state="Awaiting Client",
+            )
+            draft_message = {
+                "body": footer_body,
+                "body_markdown": body_markdown,
+                "step": step_number,
+                "next_step": step_number,
+                "thread_state": "Awaiting Client",
+                "topic": topic,
+                "subloop": subloop_label,
+                "headers": ["Availability overview"],
+                "router_qna_appended": True,
+            }
+            state.add_draft_message(draft_message)
+            update_event_metadata(
+                event_entry,
+                thread_state="Awaiting Client",
+                current_step=step_number,
+            )
+            state.set_thread_state("Awaiting Client")
+            state.record_subloop(subloop_label)
+            state.extras["persist"] = True
+
+            payload = {
+                "client_id": state.client_id,
+                "event_id": event_entry.get("event_id"),
+                "intent": state.intent.value if state.intent else None,
+                "confidence": round(state.confidence or 0.0, 3),
+                "draft_messages": state.draft_messages,
+                "thread_state": state.thread_state,
+                "context": state.context_snapshot,
+                "persisted": True,
+                "general_qna": True,
+                "catering_qna": True,
+                "qna_router_result": qna_result,
+            }
+            return GroupResult(action="general_rooms_qna", payload=payload, halt=True)
+
     scan = state.extras.get("general_qna_scan")
     # Force fresh extraction for multi-turn Q&A
     ensure_qna_extraction(state, message_text, scan, force_refresh=True)

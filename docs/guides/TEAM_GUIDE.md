@@ -557,6 +557,40 @@ Added `_apply_hil_negotiation_decision` to exports in:
 3. Clicking Approve should send the site visit message to chat
 4. Test with fresh session to ensure `thread_id` is set correctly on new events
 
+### Billing Address Not Captured From Separate Message (Fixed - 2025-12-29)
+**Symptoms:** When the client accepts an offer and the system asks for billing address, the client provides a proper billing address in a follow-up message (e.g., "Schmidt Industries GmbH, Bahnhofstrasse 42, 8001 Zurich, Switzerland"), but it is not captured. The billing_details in the database shows null for all fields, and `awaiting_billing_for_accept` remains True.
+
+**Root Cause:**
+The billing capture code at `step5_handler.py:179-182` was positioned AFTER the pending HIL check at lines 152-168. When the client sends a billing address, a pending HIL task exists from the offer acceptance, causing an early return before billing capture could execute.
+
+**Fix Applied:**
+1. Moved billing capture code BEFORE the pending HIL check in `step5_handler.py`
+2. Modified the pending HIL check to skip when `offer_accepted=True` (billing flow)
+3. The billing address is now captured immediately when `awaiting_billing_for_accept=True`
+
+**Files Modified:**
+- `backend/workflows/steps/step5_negotiation/trigger/step5_handler.py` (lines 113-175)
+
+**Verified:** E2E test confirms "Thank you for providing your billing details!" response after separate billing message
+
+### Catering Q&A Returns Room Info Instead of Catering Details (Fixed - 2025-12-29)
+**Symptoms:** When asking catering questions like "What lunch options do you have?" after rooms are presented, the system returns another room availability message instead of catering/menu information.
+
+**Root Cause:**
+- `route_general_qna` was imported in `general_qna.py` but never called in `present_general_room_qna`
+- The function only used `build_structured_qna_result` which focuses on room/date queries
+- Catering questions were detected correctly (`classification["secondary"]` = "catering_for") but not routed properly
+
+**Fix Applied:**
+1. Added catering-specific routing check in `present_general_room_qna`
+2. When `classification["secondary"]` contains "catering_for" or "products_for", route to `route_general_qna`
+3. `route_general_qna` has proper catering handling via `_catering_response()` in `qna/router.py`
+
+**Files Modified:**
+- `backend/workflows/common/general_qna.py` (lines 218-260)
+
+**Verified:** E2E test confirms "Here are our catering packages" response instead of room availability
+
 ### Room choice repeats / manual-review detours (Ongoing Fix)
 **Symptoms:** After a client types a room name (e.g., “Room E”), the workflow dropped back to Step 3, showed another room list, or enqueued manual review; sometimes the room label was mistaken for a billing address (“Billing Address: Room E”).
 
@@ -715,6 +749,28 @@ Initial inquiry with questions → is_general=True (heuristic detected "?")
 - `backend/workflows/steps/step3_room_availability/trigger/process.py` - date retrieval for room search
 
 **Reproduction:** Start new event → provide dates in February → confirm "2026-02-07" → check if Step 3 shows correct date.
+
+### Q&A Detection Not Working in Step 3 (Open - Dec 29, 2025)
+**Symptoms:** Client asks a general question ("What catering options do you have available?") while in Step 3 (Room Availability), but instead of getting a Q&A response about catering, the system re-generates a room availability message.
+
+**Observed:**
+- Client input: "What catering options do you have available?"
+- Expected: Q&A response about catering menu options
+- Actual: Room availability message repeating the same room info
+
+**Suspected Cause:** Q&A detection is either:
+1. Not being triggered in Step 3 handler
+2. Being overridden by room availability logic
+3. Intent classification not detecting the question as Q&A
+
+**Files to investigate:**
+- `backend/workflows/steps/step3_room_availability/trigger/step3_handler.py` - Q&A handling logic in Step 3
+- `backend/workflows/common/general_qna.py` - General Q&A detection and response
+- `backend/detection/unified.py` - `is_question` signal detection
+
+**Reproduction:** Start new event → go through date confirmation → at Step 3 room options, ask "What catering options do you have?" → verify Q&A response is generated
+
+**Priority:** Medium - affects user experience but doesn't block workflow
 
 ### Capacity Exceeds All Rooms - No Filtering/Routing (Fixed Dec 25)
 **Symptoms:** Client requests capacity that exceeds ALL available rooms (e.g., 150 people when max room is 120). Previously showed contradictory message: "Room B is a great fit for your 150 guests. However, it has a capacity of 60."
