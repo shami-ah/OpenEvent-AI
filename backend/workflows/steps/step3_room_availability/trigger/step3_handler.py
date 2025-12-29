@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -322,6 +323,8 @@ def process(state: WorkflowState) -> GroupResult:
             append_audit_entry(event_entry, 3, decision.next_step, f"{change_type.value}_change_detected")
 
             # Skip Q&A: return detour signal
+            # CRITICAL: Update event_entry BEFORE state.current_step so routing loop sees the change
+            update_event_metadata(event_entry, current_step=decision.next_step)
             state.current_step = decision.next_step
             state.set_thread_state("In Progress")
             state.extras["persist"] = True
@@ -376,18 +379,59 @@ def process(state: WorkflowState) -> GroupResult:
         deferred_general_qna = True
         general_qna_applicable = False
 
+    # -------------------------------------------------------------------------
+    # DETOUR RE-ENTRY GUARD (Dec 29, 2025)
+    # After a change_detour (e.g., participant change), force normal room availability
+    # path instead of Q&A fallback. The change_detour flag is set by the routing loop.
+    # -------------------------------------------------------------------------
+    is_detour_reentry = state.extras.get("change_detour", False)
+    if is_detour_reentry:
+        general_qna_applicable = False
+        trace_marker(
+            thread_id,
+            "detour_reentry",
+            detail="Forcing room availability path after change_detour",
+            owner_step="Step3_Room",
+        )
+
+    # -------------------------------------------------------------------------
+    # PURE Q&A DETECTION (Dec 29, 2025)
+    # Allow pure Q&A QUESTIONS about catering, menu, etc. even on first Step 3 entry.
+    # These are informational queries, not workflow requests.
+    # IMPORTANT: Only detect QUESTIONS, not mentions of catering in booking requests.
+    # "coffee break needed" is NOT a question; "what catering options?" IS a question.
+    # -------------------------------------------------------------------------
+    message_lower = message_text.lower() if message_text else ""
+    # Check for question patterns about catering/food
+    catering_question_patterns = [
+        r"what.*(catering|menu|food|drink|coffee|lunch|dinner|breakfast)",
+        r"(catering|menu|food|drink).*\?",
+        r"(do you|can you|could you).*(catering|menu|food|offer)",
+        r"(tell me|info|information).*(catering|menu|food)",
+        r"what.*available.*(catering|menu|food)",
+        r"(which|what).*(options|choices).*(catering|menu|food|drink)",
+    ]
+    is_pure_qna = any(re.search(pat, message_lower) for pat in catering_question_patterns)
+
     # Don't take Q&A path for initial inquiries (first entry to Step 3)
     # The Q&A path is for follow-up questions after rooms have been presented
-    # Check if this is first entry by looking for room_pending_decision or audit_log entries
+    # Check if rooms have been presented by looking for:
+    # - room_pending_decision (set after presenting room options)
+    # - locked_room_id (set after client confirms a room)
     room_pending = event_entry.get("room_pending_decision")
-    audit_log = event_entry.get("audit_log") or []
-    has_step3_history = room_pending is not None or any(
-        entry.get("to_step") == 3 or entry.get("from_step") == 3
-        for entry in audit_log
-    )
+    locked_room = event_entry.get("locked_room_id")
+    has_step3_history = room_pending is not None or locked_room is not None
     if general_qna_applicable and not has_step3_history:
-        # First entry to Step 3 with an inquiry - skip Q&A, show room options directly
-        general_qna_applicable = False
+        # First entry to Step 3 - only block workflow questions, not pure Q&A
+        if not is_pure_qna:
+            general_qna_applicable = False
+        else:
+            trace_marker(
+                thread_id,
+                "pure_qna_allowed",
+                detail=f"Allowing pure Q&A on first Step 3 entry: {message_text[:50]}...",
+                owner_step="Step3_Room",
+            )
 
     if general_qna_applicable:
         result = _present_general_room_qna(state, event_entry, classification, thread_id)
@@ -479,6 +523,25 @@ def process(state: WorkflowState) -> GroupResult:
                 "caller_step": caller_step,
             },
         )
+
+        # ---------------------------------------------------------------
+        # FIX (Dec 29, 2025): Also check if requirements changed
+        # If participant count increased, room might not fit anymore
+        # ---------------------------------------------------------------
+        requirements_changed_since_lock = (
+            room_eval_hash is not None
+            and current_req_hash is not None
+            and str(current_req_hash) != str(room_eval_hash)
+        )
+        if requirements_changed_since_lock:
+            # Requirements changed - force re-evaluation even if room is available
+            room_still_available = False
+            trace_marker(
+                thread_id,
+                "requirements_changed_force_reevaluate",
+                detail=f"Requirements hash changed: {room_eval_hash} -> {current_req_hash}",
+                owner_step="Step3_Room",
+            )
 
         if room_still_available:
             # Room is still available on the new date - update hash and skip to caller
@@ -660,12 +723,29 @@ def process(state: WorkflowState) -> GroupResult:
 
     intro_lines.append("Just let me know which room you'd like and I'll prepare the offer.")
 
+    # -------------------------------------------------------------------------
+    # CATERING TEASER: Add brief catering mention if client hasn't asked for it
+    # This integrates catering awareness into the room availability flow
+    # without requiring a separate exchange.
+    # -------------------------------------------------------------------------
+    client_prefs = event_entry.get("preferences") or {}
+    wish_products = client_prefs.get("wish_products") or []
+    has_catering_request = any(
+        "cater" in str(p).lower() or "food" in str(p).lower() or "lunch" in str(p).lower()
+        or "dinner" in str(p).lower() or "apero" in str(p).lower() or "coffee" in str(p).lower()
+        for p in wish_products
+    )
+    if not has_catering_request:
+        # Add brief catering teaser - prices from products.json (CHF 18-28/person for apéro)
+        intro_lines.append(
+            "We also offer catering packages (from CHF 18/person) if you'd like to add refreshments."
+        )
+
     # body_markdown = ONLY conversational prose (structured data is in table_blocks)
     body_markdown = " ".join(intro_lines)
 
     # Create snapshot with full room data for persistent link
     # Include client preferences so info page can show feature matching
-    client_prefs = event_entry.get("preferences") or {}
     snapshot_data = {
         "rooms": verbalizer_rooms,
         "table_rows": table_rows,
@@ -976,8 +1056,9 @@ def _handle_capacity_exceeded(
         "",
         "OPTIONS:",
         f"1. Reduce to {max_capacity} or fewer guests",
-        "2. Split into two sessions/time slots",
-        "3. External venue partnership for larger groups",
+        "2. Try a different date (some rooms may have higher capacity on other days)",
+        "3. Split into two sessions/time slots",
+        "4. External venue partnership for larger groups",
         "",
         "ASK: Which option works best, or provide updated guest count.",
     ]
@@ -1012,6 +1093,11 @@ def _handle_capacity_exceeded(
             "type": "reduce_capacity",
             "label": f"Proceed with {max_capacity} guests",
             "capacity": max_capacity,
+        },
+        {
+            "type": "change_date",
+            "label": "Try a different date",
+            "detour_to_step": 2,
         },
         {
             "type": "contact_manager",
