@@ -10,6 +10,21 @@ Design Principles:
 2. Decision-friendly - highlight key comparisons and recommendations
 3. Complete & correct - all facts preserved, nothing invented
 4. UX-focused - no data dumps, clear next steps
+
+CRITICAL DESIGN RULE - Verbalization vs Info Page:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Chat/Email (verbalization) │ Clear, conversational, NOT overloaded.        │
+│                            │ NO tables, NO dense data.                      │
+│────────────────────────────┼────────────────────────────────────────────────│
+│ Info Page/Links            │ Tables, comparisons, full menus, room details  │
+│                            │ for those who want depth.                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Implementation:
+- Chat uses conversational prose: "I found 3 options that work for you."
+- Detailed data goes into table_blocks for frontend info section
+- Include info links for users who want more detail
+- NEVER put markdown tables directly in chat/email body text
 """
 
 from __future__ import annotations

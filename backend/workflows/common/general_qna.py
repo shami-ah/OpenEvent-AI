@@ -1247,15 +1247,22 @@ def enrich_general_qna_step2(state: WorkflowState, classification: Dict[str, Any
         draft["headers"] = [CLIENT_AVAILABILITY_HEADER]
         # Fall through to set table_blocks below without overwriting body_markdown
     else:
-        # No verbalized content - build raw table response
+        # No verbalized content - build conversational response
         # Note: Don't include CLIENT_AVAILABILITY_HEADER in body_lines - it's set
         # in headers[] and _format_draft_text joins headers + body
+        # IMPORTANT: Tables are NOT included in chat messages per UX requirement.
+        # The table_blocks structure is set below for the frontend to render
+        # in a dedicated comparison section (not inline in chat).
         body_lines = []
         if intro_text:
             body_lines.append(intro_text)
-        if table_lines:
-            body_lines.append("")
-            body_lines.extend(table_lines)
+        # Add a brief summary instead of raw table
+        if display_rows:
+            room_count = len(display_rows)
+            if room_count == 1:
+                body_lines.append("I found 1 option that works for you.")
+            else:
+                body_lines.append(f"I found {room_count} options that work for you.")
         body_lines.extend(["", next_step_line])
         body_markdown = "\n".join(body_lines).strip()
 

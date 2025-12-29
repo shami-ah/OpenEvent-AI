@@ -1,5 +1,24 @@
 # OpenEvent Workflow Team Guide
 
+## UX Design Principle: Verbalization vs Info Page
+
+**CRITICAL DESIGN RULE - Always remember when working on verbalization:**
+
+| Channel | Purpose | Content Style |
+|---------|---------|---------------|
+| **Chat/Email (verbalization)** | Direct user feedback | Clear, conversational, NOT overloaded. No tables, no dense data. |
+| **Info Page/Links** | Detailed exploration | Tables, comparisons, full menus, room details for those who want depth. |
+
+**Implementation:**
+- Chat messages use conversational prose: "I found 3 options that work for you."
+- Detailed data goes into `table_blocks` structure for frontend to render in info section
+- Always include info links for users who want more detail
+- Never put markdown tables directly in chat/email body text
+
+**Why:** Keeps emails scannable and professional while still providing complete info for those who want it.
+
+---
+
 ## Overview
 - **Actors & responsibilities**
   - *Trigger nodes* (purple) parse incoming client messages and orchestrate state transitions for each workflow group.【F:backend/workflows/steps/step1_intake/trigger/process.py†L30-L207】【F:backend/workflow_email.py†L86-L145】
