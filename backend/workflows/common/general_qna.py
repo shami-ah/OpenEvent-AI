@@ -1147,7 +1147,7 @@ def enrich_general_qna_step2(state: WorkflowState, classification: Dict[str, Any
     if not table_rows:
         fallback_line = "I need a specific date before I can confirm availability."
         # Don't include header in body - it's set in headers[] and joined by _format_draft_text
-        body_lines = [fallback_line, "", "NEXT STEP:", next_step_line]
+        body_lines = [fallback_line, "", next_step_line]
         body_markdown = "\n".join(body_lines).strip()
         footer_text = "Step: 2 Date Confirmation · Next: Room Availability · State: Awaiting Client"
         draft["body_markdown"] = body_markdown
@@ -1256,7 +1256,7 @@ def enrich_general_qna_step2(state: WorkflowState, classification: Dict[str, Any
         if table_lines:
             body_lines.append("")
             body_lines.extend(table_lines)
-        body_lines.extend(["", "NEXT STEP:", next_step_line])
+        body_lines.extend(["", next_step_line])
         body_markdown = "\n".join(body_lines).strip()
 
         # Preserve router Q&A content (catering, products, etc.) that was appended earlier

@@ -78,11 +78,11 @@ def _missing_prompt(step: int | str | None, missing: Sequence[str]) -> str:
 
 
 def build_info_block(lines: List[str]) -> str:
-    """Construct an INFO block with bullet lines."""
+    """Construct an info block with bullet lines (more conversational)."""
 
-    block: List[str] = ["INFO:"]
+    block: List[str] = []
     if not lines:
-        block.append("- No additional details available right now.")
+        block.append("I don't have additional details on that right now.")
         return "\n".join(block)
 
     for line in lines:
@@ -93,23 +93,19 @@ def build_info_block(lines: List[str]) -> str:
             block.append(clean)
         else:
             block.append(f"- {clean}")
-    if len(block) == 1:
-        block.append("- No additional details available right now.")
+    if not block:
+        block.append("I don't have additional details on that right now.")
     return "\n".join(block)
 
 
 def build_next_step_line(step: int | str | None, missing_fields: Sequence[str]) -> str:
-    """Construct the NEXT STEP affordance prompting the client to continue."""
+    """Construct a conversational prompt for continuing the workflow."""
 
     label = _step_label(step)
     prompt = _missing_prompt(step, missing_fields)
     lead = prompt[:1].upper() + prompt[1:] if prompt else prompt
-    return "\n".join(
-        [
-            "NEXT STEP:",
-            f"- Proceed with {label}? {lead}",
-        ]
-    )
+    # More natural phrasing instead of "NEXT STEP:"
+    return f"To continue with {label.lower()}, please {prompt}."
 
 
 def build_qna_info_and_next_step(info_lines: List[str], current_step: int, missing: Sequence[str]) -> str:
