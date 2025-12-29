@@ -2,6 +2,7 @@
 
 Extracted from workflow_email.py as part of P1 refactoring (Dec 2025).
 Contains pre-routing checks that run after intake but before the step router:
+- Pre-filter (unified keyword/signal detection)
 - Duplicate message detection
 - Post-intake halt handling
 - Guard evaluation
@@ -16,12 +17,216 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from backend.workflows.common.types import GroupResult, WorkflowState
 from backend.workflow.guards import evaluate as evaluate_guards
 from backend.workflows.planner import maybe_run_smart_shortcuts
+from backend.detection.pre_filter import pre_filter, PreFilterResult, is_enhanced_mode
+from backend.detection.unified import run_unified_detection, UnifiedDetectionResult, is_unified_mode
+from backend.domain import TaskType
+from backend.workflows.io.tasks import enqueue_task
 
 
 # Type aliases for callback functions
 PersistFn = Callable[[WorkflowState, Path, Path], None]
 DebugFn = Callable[[str, WorkflowState, Optional[Dict[str, Any]]], None]
 FinalizeFn = Callable[[GroupResult, WorkflowState, Path, Path], Dict[str, Any]]
+
+
+def run_unified_pre_filter(
+    state: WorkflowState,
+    combined_text: str,
+) -> Tuple[PreFilterResult, Optional[UnifiedDetectionResult]]:
+    """Run the unified pre-filter and LLM detection on the incoming message.
+
+    This runs two detection layers:
+    1. Pre-filter ($0 regex): Duplicates, billing patterns - deterministic
+    2. Unified LLM (~$0.004): Semantic signals - manager, confirmation, intent
+
+    Results are stored in state.extras for downstream use.
+
+    Args:
+        state: Current workflow state
+        combined_text: Combined subject + body text
+
+    Returns:
+        Tuple of (PreFilterResult, UnifiedDetectionResult or None)
+    """
+    # Get last message for duplicate detection
+    last_message = None
+    if state.event_entry:
+        last_message = state.event_entry.get("last_client_message")
+
+    # Get registered manager names if available (for escalation detection)
+    # TODO: Load from client/venue config when available
+    registered_manager_names = None
+
+    # Run the pre-filter (regex only - $0 cost)
+    pre_result = pre_filter(
+        message=combined_text,
+        last_message=last_message,
+        event_entry=state.event_entry,
+        registered_manager_names=registered_manager_names,
+    )
+
+    # Store pre-filter result
+    state.extras["pre_filter"] = pre_result.to_dict()
+    state.extras["pre_filter_mode"] = "enhanced" if is_enhanced_mode() else "legacy"
+
+    # Run unified LLM detection for semantic signals (manager, confirmation, intent)
+    # This is where semantic understanding happens (e.g., "Can I speak with someone?")
+    unified_result: Optional[UnifiedDetectionResult] = None
+
+    if is_unified_mode():
+        # Extract context from event_entry for better detection
+        current_step = None
+        date_confirmed = False
+        room_locked = False
+        last_topic = None
+
+        if state.event_entry:
+            current_step = state.event_entry.get("current_step")
+            date_confirmed = state.event_entry.get("date_confirmed", False)
+            room_locked = state.event_entry.get("locked_room_id") is not None
+            thread_state = state.event_entry.get("thread_state") or {}
+            # Defensive: thread_state might be a string in some legacy data
+            if isinstance(thread_state, dict):
+                last_topic = thread_state.get("last_topic")
+            else:
+                last_topic = None
+
+        unified_result = run_unified_detection(
+            combined_text,
+            current_step=current_step,
+            date_confirmed=date_confirmed,
+            room_locked=room_locked,
+            last_topic=last_topic,
+        )
+
+        # Store unified detection result
+        state.extras["unified_detection"] = unified_result.to_dict()
+
+        print(f"[UNIFIED_DETECTION] intent={unified_result.intent}, manager={unified_result.is_manager_request}, conf={unified_result.is_confirmation}")
+
+    # Log in enhanced mode
+    if is_enhanced_mode() and pre_result.matched_patterns:
+        print(f"[PRE_FILTER] Mode=enhanced, signals={pre_result.matched_patterns[:5]}")
+        if pre_result.can_skip_intent_llm:
+            print(f"[PRE_FILTER] Can skip intent LLM (pure confirmation)")
+
+    return pre_result, unified_result
+
+
+def handle_manager_escalation(
+    state: WorkflowState,
+    unified_result: Optional[UnifiedDetectionResult],
+    path: Path,
+    lock_path: Path,
+    finalize_fn: FinalizeFn,
+) -> Optional[Dict[str, Any]]:
+    """Handle manager escalation requests detected by LLM semantic analysis.
+
+    Uses unified LLM detection (Gemini) for semantic understanding of manager
+    requests like "Can I speak with someone?" rather than regex keywords.
+
+    When a client asks to speak with a manager/human, we:
+    1. Create a MESSAGE_MANAGER HIL task for manager review
+    2. Return a response acknowledging the request
+
+    Args:
+        state: Current workflow state
+        unified_result: Result from LLM unified detection with is_manager_request
+        path: Database file path
+        lock_path: Database lock file path
+        finalize_fn: Callback to finalize and return result
+
+    Returns:
+        Finalized response if escalation detected, None otherwise
+    """
+    # Use LLM-based detection for semantic understanding
+    # This correctly handles phrases like "Can I speak with someone?" without
+    # false positives on email addresses like "test-manager@example.com"
+    if unified_result is None:
+        return None
+
+    if not unified_result.is_manager_request:
+        return None
+
+    print(f"[PRE_ROUTE] Manager escalation detected - creating HIL task")
+
+    # Get client and event info
+    client_id = state.client_id or "unknown"
+    event_id = state.event_entry.get("event_id") if state.event_entry else None
+    thread_id = state.thread_id
+
+    # Build task payload with context
+    task_payload = {
+        "snippet": (state.message.body[:200] if state.message and state.message.body else ""),
+        "thread_id": thread_id,
+        "step_id": state.event_entry.get("current_step") if state.event_entry else 1,
+        "reason": "client_requested_manager",
+        "event_summary": None,
+    }
+
+    # Add event summary if we have an event
+    if state.event_entry:
+        task_payload["event_summary"] = {
+            "client_name": state.event_entry.get("client_name", "Not specified"),
+            "email": client_id,
+            "chosen_date": state.event_entry.get("chosen_date"),
+            "locked_room": state.event_entry.get("locked_room_id"),
+            "current_step": state.event_entry.get("current_step", 1),
+        }
+
+    # Create task using the db from state (already loaded)
+    from backend.workflows.io.database import lock_path_for, save_db
+
+    task_id = enqueue_task(
+        state.db,
+        TaskType.MESSAGE_MANAGER,
+        client_id,
+        event_id,
+        task_payload,
+    )
+    # Save the updated database
+    save_db(state.db, state.db_path, lock_path_for(state.db_path))
+
+    print(f"[PRE_ROUTE] Created manager escalation task: {task_id}")
+
+    # Set flag on event for downstream handlers
+    if state.event_entry:
+        flags = state.event_entry.setdefault("flags", {})
+        flags["manager_requested"] = True
+        state.extras["persist"] = True
+
+    # Add acknowledgment draft message
+    draft_message = {
+        "body_markdown": (
+            "I understand you'd like to speak with a manager. "
+            "I've forwarded your request to our team, and someone will be in touch with you shortly. "
+            "In the meantime, is there anything else I can help you with regarding your booking?"
+        ),
+        "step": state.event_entry.get("current_step", 1) if state.event_entry else 1,
+        "topic": "manager_escalation",
+        "requires_approval": False,  # This response doesn't need HIL approval
+    }
+    state.add_draft_message(draft_message)
+
+    # Return response indicating escalation handled
+    escalation_response = GroupResult(
+        action="manager_escalation",
+        halt=True,
+        payload={
+            "task_id": task_id,
+            "topic": "manager_escalation",
+        },
+    )
+
+    from backend.debug.hooks import trace_marker
+    trace_marker(
+        state.thread_id,
+        "MANAGER_ESCALATION_DETECTED",
+        detail=f"Created HIL task {task_id} for manager review",
+        owner_step=f"Step{state.event_entry.get('current_step', 1) if state.event_entry else 1}",
+    )
+
+    return finalize_fn(escalation_response, state, path, lock_path)
 
 
 def check_duplicate_message(
@@ -198,6 +403,8 @@ def run_pre_route_pipeline(
     """Run the complete pre-routing pipeline.
 
     Executes all pre-routing checks after intake:
+    0. Unified pre-filter (keyword/signal detection)
+    0.5. Manager escalation handling (creates HIL task if manager requested)
     1. Duplicate message detection
     2. Post-intake halt check
     3. Guard evaluation
@@ -219,7 +426,22 @@ def run_pre_route_pipeline(
         - early_return is the Dict to return if pipeline short-circuited, or None to continue
         - last_result is the intake result (unchanged if continuing to router)
     """
-    # 1. Duplicate message detection
+    # 0. Unified pre-filter + LLM detection (runs before all other checks)
+    # - Pre-filter: $0 regex for duplicates, billing patterns
+    # - Unified LLM: Semantic signals (manager, confirmation, intent)
+    pre_filter_result, unified_result = run_unified_pre_filter(state, combined_text)
+
+    # 0.5. Manager escalation check (before duplicate detection)
+    # Uses LLM-based semantic detection for phrases like "Can I speak with someone?"
+    # This avoids regex false positives on emails like "test-manager@example.com"
+    escalation_result = handle_manager_escalation(
+        state, unified_result, path, lock_path, finalize_fn
+    )
+    if escalation_result is not None:
+        return escalation_result, intake_result
+
+    # 1. Duplicate message detection (now uses pre-filter result if in enhanced mode)
+    # In enhanced mode, pre_filter_result.is_duplicate is already computed
     duplicate_result = check_duplicate_message(state, combined_text, path, lock_path, finalize_fn)
     if duplicate_result is not None:
         return duplicate_result, intake_result

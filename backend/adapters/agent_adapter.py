@@ -19,6 +19,11 @@ try:  # pragma: no cover - optional dependency resolved at runtime
 except Exception:  # pragma: no cover - library may be unavailable in tests
     OpenAI = None  # type: ignore
 
+try:  # pragma: no cover - optional dependency resolved at runtime
+    import google.generativeai as genai  # type: ignore
+except Exception:  # pragma: no cover - library may be unavailable in tests
+    genai = None  # type: ignore
+
 
 class AgentAdapter:
     """Base adapter defining the agent interface for intent routing and entity extraction."""
@@ -51,6 +56,32 @@ class AgentAdapter:
             if isinstance(fields, dict):
                 return fields
         raise NotImplementedError("extract_entities must be implemented by subclasses.")
+
+    def complete(
+        self,
+        prompt: str,
+        *,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.1,
+        max_tokens: int = 1000,
+        json_mode: bool = True,
+    ) -> str:
+        """Run a raw completion with a custom prompt.
+
+        This is the generic entrypoint for unified detection and other
+        custom LLM operations that don't fit the intent/entity pattern.
+
+        Args:
+            prompt: The prompt to send to the LLM
+            system_prompt: Optional system prompt
+            temperature: Sampling temperature (default 0.1 for consistency)
+            max_tokens: Max tokens in response
+            json_mode: Whether to request JSON output
+
+        Returns:
+            Raw text response from the LLM
+        """
+        raise NotImplementedError("complete must be implemented by subclasses.")
 
 
 class StubAgentAdapter(AgentAdapter):
@@ -310,6 +341,43 @@ class StubAgentAdapter(AgentAdapter):
                     continue
         return None
 
+    def complete(
+        self,
+        prompt: str,
+        *,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.1,
+        max_tokens: int = 1000,
+        json_mode: bool = True,
+    ) -> str:
+        """Stub implementation returns a minimal JSON response for testing."""
+        # For unified detection, return a basic structure
+        return json.dumps({
+            "language": "en",
+            "intent": "general_qna",
+            "intent_confidence": 0.5,
+            "signals": {
+                "is_confirmation": False,
+                "is_acceptance": False,
+                "is_rejection": False,
+                "is_change_request": False,
+                "is_manager_request": False,
+                "is_question": "?" in prompt,
+                "has_urgency": False,
+            },
+            "entities": {
+                "date": None,
+                "date_text": None,
+                "participants": None,
+                "duration_hours": None,
+                "room_preference": None,
+                "products": [],
+                "billing_address": None,
+            },
+            "qna_types": [],
+            "step_anchor": None,
+        })
+
 
 class OpenAIAgentAdapter(AgentAdapter):
     """Adapter backed by OpenAI chat completions for intent/entity tasks."""
@@ -428,6 +496,213 @@ class OpenAIAgentAdapter(AgentAdapter):
         fields = self.extract_entities(msg)
         return {"intent": intent, "confidence": confidence, "fields": fields}
 
+    def complete(
+        self,
+        prompt: str,
+        *,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.1,
+        max_tokens: int = 1000,
+        json_mode: bool = True,
+    ) -> str:
+        """Run a raw completion with OpenAI."""
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        try:
+            kwargs: Dict[str, Any] = {
+                "model": self._intent_model,
+                "messages": messages,
+            }
+            # o-series models don't support temperature and use max_completion_tokens
+            if self._intent_model.startswith("o"):
+                kwargs["max_completion_tokens"] = max_tokens
+            else:
+                kwargs["temperature"] = temperature
+                kwargs["max_tokens"] = max_tokens
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+
+            response = self._client.chat.completions.create(**kwargs)
+            return response.choices[0].message.content or "{}"
+        except Exception as e:
+            print(f"[OpenAIAgentAdapter] complete error: {e}")
+            return self._fallback.complete(prompt, system_prompt=system_prompt, json_mode=json_mode)
+
+
+class GeminiAgentAdapter(AgentAdapter):
+    """Adapter backed by Google Gemini for intent/entity tasks.
+
+    Uses Gemini Flash 2.0 by default for fast, cost-effective classification.
+    Falls back to StubAgentAdapter on API errors for resilience.
+    """
+
+    _INTENT_PROMPT = (
+        "Classify the email below as either an event booking request or something else. "
+        "Respond with ONLY a JSON object: {\"intent\": \"event_request\" or \"other\", "
+        "\"confidence\": 0.0 to 1.0}. No other text."
+    )
+
+    _ENTITY_PROMPT_TEMPLATE = (
+        "Today is {today}. Extract booking details from this email. "
+        "Return ONLY a JSON object with these keys (use null when unknown): "
+        "date (YYYY-MM-DD), start_time, end_time, city, participants (integer), "
+        "room, name, email, type, catering, phone, company, language, notes, "
+        "billing_address, products_add (array of {{name, quantity}}), "
+        "products_remove (array of product names). "
+        "IMPORTANT: Use the exact year mentioned (e.g., '2026'). "
+        "For vague dates like 'late spring', return null for date."
+    )
+
+    _ENTITY_KEYS = [
+        "date", "start_time", "end_time", "city", "participants", "room",
+        "name", "email", "type", "catering", "phone", "company", "language",
+        "notes", "billing_address", "products_add", "products_remove",
+    ]
+
+    def __init__(self) -> None:
+        if genai is None:
+            raise RuntimeError("google-generativeai package is required when AGENT_MODE=gemini")
+
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise RuntimeError("GOOGLE_API_KEY environment variable is required for Gemini")
+
+        genai.configure(api_key=api_key)
+
+        # Model selection - Flash 2.0 for speed/cost, Pro 2.0 for quality
+        self._intent_model = os.getenv("GEMINI_INTENT_MODEL", "gemini-2.0-flash")
+        self._entity_model = os.getenv("GEMINI_ENTITY_MODEL", "gemini-2.0-flash")
+        self._fallback = StubAgentAdapter()
+
+    def _run_completion(self, *, prompt: str, body: str, subject: str, model_name: str) -> Dict[str, Any]:
+        """Run a Gemini completion and parse JSON response."""
+        message = f"Subject: {subject}\n\nBody:\n{body}"
+
+        model = genai.GenerativeModel(
+            model_name,
+            generation_config=genai.GenerationConfig(
+                temperature=0,
+                response_mime_type="application/json",
+            ),
+        )
+
+        response = model.generate_content([
+            {"role": "user", "parts": [f"{prompt}\n\n{message}"]},
+        ])
+
+        content = response.text if response else "{}"
+        try:
+            return json.loads(content or "{}")
+        except json.JSONDecodeError:
+            return {}
+
+    def _select_fallback_strategy(self, error: Exception, operation: str) -> str:
+        """Determine fallback behavior when Gemini fails.
+
+        This method controls what happens when the Gemini API call fails.
+        Returns: "stub" to use heuristics, "raise" to propagate error.
+
+        TODO: User to implement - see CONTRIBUTING note below.
+        """
+        # Default: always fall back to stub for resilience
+        return "stub"
+
+    def route_intent(self, msg: Dict[str, Any]) -> Tuple[str, float]:
+        subject = msg.get("subject") or ""
+        body = msg.get("body") or ""
+        try:
+            payload = self._run_completion(
+                prompt=self._INTENT_PROMPT,
+                body=body,
+                subject=subject,
+                model_name=self._intent_model,
+            )
+            intent = str(payload.get("intent") or "").strip().lower()
+            if intent not in {IntentLabel.EVENT_REQUEST.value, IntentLabel.NON_EVENT.value}:
+                intent = IntentLabel.NON_EVENT.value
+            confidence_raw = payload.get("confidence")
+            try:
+                confidence = float(confidence_raw)
+            except (TypeError, ValueError):
+                confidence = 0.5
+            confidence = max(0.0, min(1.0, confidence))
+            return intent or IntentLabel.NON_EVENT.value, confidence
+        except Exception as e:
+            strategy = self._select_fallback_strategy(e, "intent")
+            if strategy == "stub":
+                return self._fallback.route_intent(msg)
+            raise
+
+    def extract_entities(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+        subject = msg.get("subject") or ""
+        body = msg.get("body") or ""
+        try:
+            today_str = date.today().strftime("%Y-%m-%d")
+            prompt = self._ENTITY_PROMPT_TEMPLATE.format(today=today_str)
+            payload = self._run_completion(
+                prompt=prompt,
+                body=body,
+                subject=subject,
+                model_name=self._entity_model,
+            )
+            entities: Dict[str, Any] = {}
+            for key in self._ENTITY_KEYS:
+                entities[key] = payload.get(key)
+            return entities
+        except Exception as e:
+            strategy = self._select_fallback_strategy(e, "entity")
+            if strategy == "stub":
+                return self._fallback.extract_entities(msg)
+            raise
+
+    def analyze_message(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+        """Combine intent classification and entity extraction into a single response."""
+        intent, confidence = self.route_intent(msg)
+        fields = self.extract_entities(msg)
+        return {"intent": intent, "confidence": confidence, "fields": fields}
+
+    def complete(
+        self,
+        prompt: str,
+        *,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.1,
+        max_tokens: int = 1000,
+        json_mode: bool = True,
+    ) -> str:
+        """Run a raw completion with Gemini."""
+        try:
+            # Prepend system prompt if provided
+            full_prompt = prompt
+            if system_prompt:
+                full_prompt = f"{system_prompt}\n\n{prompt}"
+
+            generation_config = genai.GenerationConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+            )
+            if json_mode:
+                generation_config.response_mime_type = "application/json"
+
+            model = genai.GenerativeModel(
+                self._intent_model,
+                generation_config=generation_config,
+            )
+
+            response = model.generate_content([
+                {"role": "user", "parts": [full_prompt]},
+            ])
+
+            return response.text if response else "{}"
+        except Exception as e:
+            strategy = self._select_fallback_strategy(e, "complete")
+            if strategy == "stub":
+                return self._fallback.complete(prompt, system_prompt=system_prompt, json_mode=json_mode)
+            raise
+
 
 _AGENT_SINGLETON: Optional[AgentAdapter] = None
 
@@ -445,6 +720,9 @@ def get_agent_adapter() -> AgentAdapter:
         return _AGENT_SINGLETON
     if mode == "openai":
         _AGENT_SINGLETON = OpenAIAgentAdapter()
+        return _AGENT_SINGLETON
+    if mode == "gemini":
+        _AGENT_SINGLETON = GeminiAgentAdapter()
         return _AGENT_SINGLETON
     raise RuntimeError(f"Unsupported AGENT_MODE: {mode}")
 

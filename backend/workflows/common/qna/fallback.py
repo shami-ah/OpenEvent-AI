@@ -47,8 +47,8 @@ def _structured_table_blocks(db_summary: Dict[str, Any]) -> List[Dict[str, Any]]
         rows.append(
             {
                 "Room": name,
-                "Dates": ", ".join(sorted(payload["dates"])) if payload["dates"] else "—",
-                "Notes": "; ".join(sorted(payload["notes"])) if payload["notes"] else "—",
+                "Dates": ", ".join(sorted(payload["dates"])) if payload["dates"] else "-",
+                "Notes": "; ".join(sorted(payload["notes"])) if payload["notes"] else "-",
             }
         )
     if not rows:
