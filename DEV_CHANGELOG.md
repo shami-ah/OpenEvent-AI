@@ -2,6 +2,32 @@
 
 ## 2025-12-29
 
+### No Tables in Chat + Design Principle Documentation (Session 3)
+
+**Summary:** Removed markdown tables from chat messages per UX design principle. Tables belong in info pages, not in conversational chat/email.
+
+**UX Design Principle Established:**
+- **Chat/Email (verbalization)**: Clear, conversational, NOT overloaded. No tables, no dense data.
+- **Info Page/Links**: Tables, comparisons, full menus, room details for those who want depth.
+
+**Changes:**
+1. Removed markdown table rendering from `general_qna.py` body text
+2. Replaced with conversational summary: "I found X options that work for you"
+3. `table_blocks` structure preserved for frontend info page rendering
+4. Documented design principle in `docs/guides/TEAM_GUIDE.md` and `backend/ux/universal_verbalizer.py`
+
+**Files Modified:**
+- `backend/workflows/common/general_qna.py`
+- `backend/ux/universal_verbalizer.py`
+- `docs/guides/TEAM_GUIDE.md`
+
+**Testing Verified:**
+- ✅ No tables appear in chat messages
+- ✅ "View all available rooms" link points to info page
+- ✅ Conversational tone maintained
+
+---
+
 ### Billing, Catering Q&A, and UX Improvements (Session 2)
 
 **Summary:** Fixed billing address capture, catering Q&A routing, added catering teaser to room availability, and improved date suggestion verbalization.

@@ -681,9 +681,10 @@ def process(state: WorkflowState) -> GroupResult:
     )
     assistant_draft = rendered.get("assistant_draft", {})
     body_markdown = assistant_draft.get("body", "")
-    headers = assistant_draft.get("headers") or (
-        [f"Room options for {display_chosen_date}"] if display_chosen_date else ["Room options"]
-    )
+    # Headers are rendered at TOP of message in frontend
+    # Per UX design principle: conversational message first, summary info via info links
+    # Keep headers minimal - just "Availability overview" for context
+    headers = ["Availability overview"]
     table_blocks = rendered.get("table_blocks")
     if not table_blocks and table_rows:
         label = f"Rooms for {display_chosen_date}" if display_chosen_date else "Room options"
@@ -776,8 +777,10 @@ def process(state: WorkflowState) -> GroupResult:
         participants=participants or event_entry.get("number_of_participants", 0),
         snapshot_id=snapshot_id,
     )
+    # Conversational message FIRST, then summary/link at end
+    # (per UX design principle: direct address to client first)
     if body_markdown:
-        body_markdown = "\n".join([room_link, "", body_markdown])
+        body_markdown = "\n".join([body_markdown, "", room_link])
     else:
         body_markdown = room_link
 
@@ -810,7 +813,7 @@ def process(state: WorkflowState) -> GroupResult:
     menu_content = None
     if qa_lines:
         menu_content = "\n".join(qa_lines)
-        headers = ["Availability overview"] + [header for header in headers if header]
+        # headers already set to ["Availability overview"] above
         state.record_subloop("general_q_a")
         state.extras["subloop"] = "general_q_a"
 
