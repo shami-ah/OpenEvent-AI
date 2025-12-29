@@ -214,15 +214,47 @@ The system supports multiple LLM providers with per-operation granularity:
 | `VERBALIZER_PROVIDER` | `openai`, `gemini` | `openai` | Draft verbalization provider |
 | `GOOGLE_API_KEY` | - | (required for Gemini) | Google AI API key |
 
-**Cost Optimization Strategy:**
+#### Cost Comparison per API Call
+
+| Operation | OpenAI (o3-mini) | Gemini Flash 2.0 | Savings |
+|-----------|------------------|------------------|---------|
+| Intent Classification | ~$0.005 | ~$0.00125 | **75%** |
+| Entity Extraction | ~$0.008 | ~$0.002 | **75%** |
+| Verbalization | ~$0.015 | ~$0.004 | 73% |
+
+#### Cost per Event (Typical Flow)
+
+| Configuration | Cost/Event | Notes |
+|---------------|------------|-------|
+| Full OpenAI | ~$0.04 | Best quality, highest cost |
+| Hybrid (Gemini intent/entity, OpenAI verbal) | ~$0.02 | **Recommended** - 50% savings |
+| Full Gemini | ~$0.007 | 82% savings, slightly lower quality |
+| Stub mode | $0 | Heuristics only, development/testing |
+
+#### Gemini Free Tier Limits
+
+| Limit | Value | Implication |
+|-------|-------|-------------|
+| Requests per minute | 15 RPM | ~7.5 messages/minute (2 calls each) |
+| Tokens per day | 1,000,000 | More than sufficient for typical use |
+| Requests per day | 1,500 | **~750 client messages/day** |
+
+**Calculation:** Each client message = 1 intent call + 1 entity call = 2 API requests.
+With 1,500 requests/day limit: `1500 / 2 = 750 messages/day` on free tier.
+
+**To get a Gemini API key:** https://aistudio.google.com/apikey (free, no billing required)
+
+#### Cost Optimization Strategy
 - Use `AGENT_MODE=gemini` for intent/entity extraction (75% cheaper than OpenAI)
 - Keep `VERBALIZER_PROVIDER=openai` for client-facing message quality
 - Use `VERBALIZER_TONE=plain` to disable LLM verbalization entirely (testing only)
 - Use `AGENT_MODE=stub` for deterministic heuristics (no LLM cost, lower quality)
 
-**Admin UI Toggle:**
+#### Admin UI Toggle
 - **Global Deposit**: Configure at runtime via admin panel → Deposit Settings
-- **LLM Provider**: Configure at runtime via admin panel → LLM Settings (planned)
+- **LLM Provider**: Configure at runtime via admin panel → LLM Settings
+
+> **📚 Detailed Architecture:** For a complete breakdown of which extraction methods (Regex, NER, LLM) are used where, see [`docs/internal/LLM_EXTRACTION_ARCHITECTURE.md`](docs/internal/LLM_EXTRACTION_ARCHITECTURE.md)
 
 ### Dev Test Mode (Continue/Reset Choice)
 

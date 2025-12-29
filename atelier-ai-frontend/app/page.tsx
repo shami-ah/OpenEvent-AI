@@ -9,6 +9,7 @@ import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
 import DebugPanel from './components/DebugPanel';
 import DepositSettings from './components/DepositSettings';
+import LLMSettings from './components/LLMSettings';
 
 const BACKEND_BASE =
   (process.env.NEXT_PUBLIC_BACKEND_BASE || 'http://localhost:8000').replace(/\/$/, '');
@@ -1445,6 +1446,9 @@ function EmailThreadUIContent() {
       <div className="mx-auto max-w-[1800px] mt-4 flex gap-4">
         <div className="flex-1">
           <DepositSettings compact />
+        </div>
+        <div className="flex-1">
+          <LLMSettings compact />
         </div>
         <div className="flex gap-2 items-start">
           <button
