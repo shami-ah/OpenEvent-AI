@@ -2,6 +2,55 @@
 
 ## 2025-12-29
 
+### Deposit Flow Fix: Synthetic Message Creating New Event (Session 6.3)
+
+**Summary:** Fixed critical bug where deposit payment synthetic message created a new event instead of continuing the existing one.
+
+**Root Cause:**
+In `step1_handler.py:_ensure_event_record()`, the logic for detecting "offer accepted continuation" had two bugs:
+1. Used wrong field name `deposit_state` instead of `deposit_info`
+2. Didn't check for `deposit_just_paid` flag from the synthetic deposit payment message
+3. Didn't check for explicit `event_id` match in message extras
+
+When the deposit endpoint sent a synthetic "I have paid the deposit" message:
+- `awaiting_billing` = False (billing already captured)
+- `awaiting_deposit` = False (wrong field + deposit already paid)
+- `looks_like_billing` = False (message doesn't look like billing)
+- Result: `should_create_new = True` → New event created
+
+**Fix:**
+Added checks for:
+- `deposit_just_paid` flag in `state.message.extras`
+- Explicit `event_id` match between message extras and existing event
+- Fixed field name from `deposit_state` to `deposit_info`
+
+**Files Modified:**
+- `backend/workflows/steps/step1_intake/trigger/step1_handler.py` - Lines 1089-1115
+
+**E2E Verification:** Screenshot saved as `.playwright-mcp/e2e-deposit-flow-fixed.png`
+
+---
+
+### Billing Extraction at Intake (Session 6.2)
+
+**Summary:** Added billing extraction from initial event request messages.
+
+**Root Cause:**
+Billing extraction only happened when the message was NOT classified as an event request. If a client included their billing address in their initial inquiry, it was ignored.
+
+**Fix:**
+Added `_extract_billing_from_body()` function that:
+1. Looks for explicit billing section markers ("billing address:", "invoice to:", etc.)
+2. Falls back to detecting multi-line address blocks with postal codes
+3. Called BEFORE `handle_billing_capture()` for any message containing billing info
+
+**Files Modified:**
+- `backend/workflows/steps/step1_intake/trigger/step1_handler.py` - Added `_extract_billing_from_body()` function
+
+**E2E Verification:** Tested with message containing billing in initial inquiry - billing captured and shown in offer.
+
+---
+
 ### UX Improvements: LLM Output Hygiene (Session 6.1)
 
 **Summary:** Removed AI-looking patterns from client-facing messages to make output feel more natural.

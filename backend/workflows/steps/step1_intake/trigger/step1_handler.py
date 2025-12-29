@@ -57,6 +57,71 @@ from .date_fallback import fallback_year_from_ts as _fallback_year_from_ts
 from .gate_confirmation import looks_like_offer_acceptance as _looks_like_offer_acceptance
 from .gate_confirmation import looks_like_billing_fragment as _looks_like_billing_fragment
 
+
+def _extract_billing_from_body(body: str) -> Optional[str]:
+    """
+    Extract billing address from message body if it contains billing info.
+
+    Handles cases where billing is embedded in a larger message (e.g., event request
+    that also includes billing address).
+
+    Returns the extracted billing portion, or None if no billing info found.
+    """
+    if not body or not body.strip():
+        return None
+
+    # Check for explicit billing section markers
+    billing_markers = [
+        r"(?:our\s+)?billing\s+address(?:\s+is)?[:\s]*",
+        r"(?:our\s+)?address(?:\s+is)?[:\s]*",
+        r"invoice\s+(?:to|address)[:\s]*",
+        r"send\s+invoice\s+to[:\s]*",
+    ]
+
+    for pattern in billing_markers:
+        match = re.search(pattern + r"(.+?)(?:\n\n|Best|Kind|Thank|Regards|$)", body, re.IGNORECASE | re.DOTALL)
+        if match:
+            billing_text = match.group(1).strip()
+            # Validate it looks like an address (has street/postal)
+            if _looks_like_billing_fragment(billing_text):
+                return billing_text
+
+    # Fallback: check if message contains billing keywords but no explicit marker
+    # Only extract if it looks like a complete address
+    if _looks_like_billing_fragment(body):
+        # Try to find a multi-line address block
+        lines = body.split("\n")
+        address_lines = []
+        in_address = False
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                if in_address and len(address_lines) >= 2:
+                    break  # End of address block
+                continue
+
+            # Check if line looks like address part (has postal code, street number, or company name)
+            has_postal = re.search(r"\b\d{4,6}\b", line)
+            has_street_num = re.search(r"\d+\w*\s*$|\s\d+\s", line)
+            is_company = bool(re.search(r"\b(gmbh|ag|ltd|inc|corp|llc|sarl|sa)\b", line, re.IGNORECASE))
+            is_city_country = bool(re.search(r"\b(zurich|zürich|geneva|bern|basel|switzerland|schweiz)\b", line, re.IGNORECASE))
+
+            if has_postal or has_street_num or is_company or is_city_country:
+                in_address = True
+                address_lines.append(line)
+            elif in_address:
+                # Continue adding lines until we hit something that's clearly not address
+                if len(line) < 50 and not re.search(r"\b(hello|hi|dear|please|thank|we|i am|looking)\b", line, re.IGNORECASE):
+                    address_lines.append(line)
+                else:
+                    break
+
+        if len(address_lines) >= 2:
+            return "\n".join(address_lines)
+
+    return None
+
 # I1 Phase 1: Intent helpers
 from .intent_helpers import (
     needs_vague_date_confirmation as _needs_vague_date_confirmation,
@@ -596,6 +661,16 @@ def process(state: WorkflowState) -> GroupResult:
 
     if merge_client_profile(event_entry, user_info):
         state.extras["persist"] = True
+
+    # Extract billing from message body if not already captured
+    # This allows billing to be captured even from event requests that include billing info
+    if not user_info.get("billing_address"):
+        body_text = message_payload.get("body") or ""
+        extracted_billing = _extract_billing_from_body(body_text)
+        if extracted_billing:
+            user_info["billing_address"] = extracted_billing
+            trace_entity(thread_id, owner_step, "billing_address", extracted_billing[:100], True)
+
     handle_billing_capture(state, event_entry)
     menu_choice_name = user_info.get("menu_choice")
     if menu_choice_name:
@@ -1011,21 +1086,32 @@ def _ensure_event_record(
         # Check if this is a continuation of the accepted offer flow
         billing_reqs = last_event.get("billing_requirements") or {}
         awaiting_billing = billing_reqs.get("awaiting_billing_for_accept", False)
-        deposit_state = last_event.get("deposit_state") or {}
-        awaiting_deposit = deposit_state.get("required") and not deposit_state.get("paid")
+        # FIX: Use correct field name (deposit_info, not deposit_state)
+        deposit_info = last_event.get("deposit_info") or {}
+        awaiting_deposit = deposit_info.get("deposit_required") and not deposit_info.get("deposit_paid")
 
         # Also check if the message looks like billing info (address, postal code, etc.)
         message_body = (state.message.body or "").strip().lower()
         looks_like_billing = _looks_like_billing_fragment(message_body) if message_body else False
 
+        # Check if this is a synthetic deposit payment notification
+        # (comes from pay_deposit endpoint with deposit_just_paid flag)
+        deposit_just_paid = state.message.extras.get("deposit_just_paid", False)
+
+        # Check if message includes explicit event_id matching this event
+        msg_event_id = state.message.extras.get("event_id")
+        event_id_matches = msg_event_id and msg_event_id == last_event.get("event_id")
+
         # Only create new event if this is truly a NEW inquiry, not a billing/deposit follow-up
-        if awaiting_billing or awaiting_deposit or looks_like_billing:
+        if awaiting_billing or awaiting_deposit or looks_like_billing or deposit_just_paid or event_id_matches:
             # Continue with existing event - don't create new
             trace_db_write(_thread_id(state), "Step1_Intake", "offer_accepted_continue", {
                 "reason": "billing_or_deposit_followup",
                 "awaiting_billing": awaiting_billing,
                 "awaiting_deposit": awaiting_deposit,
                 "looks_like_billing": looks_like_billing,
+                "deposit_just_paid": deposit_just_paid,
+                "event_id_matches": event_id_matches,
             })
         else:
             # New inquiry from same client after offer was accepted - create fresh event
