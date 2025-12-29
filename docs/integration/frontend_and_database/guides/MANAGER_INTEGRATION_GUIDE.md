@@ -459,6 +459,75 @@ Things you need to configure before launch.
 
 ---
 
+## Task 3b: HIL Email Notifications (READY TO CONFIGURE)
+
+**What:** Send email notifications to Event Manager when HIL tasks need approval.
+
+**Why:** In addition to the frontend Manager Tasks panel, the system can now send email notifications when tasks require approval. This ensures the Event Manager doesn't miss urgent approvals.
+
+**Status:** ✅ IMPLEMENTED (December 2025) - needs SMTP configuration
+
+### How It Works
+
+1. When a HIL task is created (offer approval, date confirmation, etc.)
+2. Email notification is sent to the Event Manager
+3. Email contains: client name, draft message, event details
+4. Manager clicks link to open dashboard and approve/reject
+5. This works IN ADDITION to the frontend panel (not instead of)
+
+### Configuration Options
+
+**Option A: Environment Variables**
+```bash
+EVENT_MANAGER_EMAIL=manager@atelier.ch
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password  # Use app password for Gmail
+HIL_FROM_EMAIL=openevent@atelier.ch
+```
+
+**Option B: API Configuration**
+```bash
+POST /api/config/hil-email
+{
+  "enabled": true,
+  "manager_email": "manager@atelier.ch"
+}
+```
+
+### For Supabase Integration
+
+The manager email should come from the logged-in user:
+
+```python
+# In production, fetch from Supabase auth context:
+manager_email = supabase.auth.get_user().email
+
+# The current API endpoint serves as fallback:
+POST /api/config/hil-email {"manager_email": manager_email}
+```
+
+### Test Email Configuration
+
+```bash
+# Send test notification to verify SMTP works
+POST /api/config/hil-email/test
+
+# Send test email to specific address
+POST /api/emails/test {"to_email": "test@example.com"}
+```
+
+### Files to Reference
+
+| File | Purpose |
+|------|---------|
+| `backend/services/hil_email_notification.py` | Core email service |
+| `backend/api/routes/emails.py` | Client email endpoints |
+| `backend/api/routes/config.py` | HIL email config endpoints |
+
+---
+
 ## Task 4: Document Your Team ID
 
 **What:** We need to identify your venue in the database so the AI accesses the correct rooms, products, and events.
@@ -504,6 +573,7 @@ Before testing:
 - [ ] AI identity user created, ID saved: ________________
 - [ ] Email account connected, ID saved: ________________
 - [ ] Team ID: ☐ Saved: ________ / ☐ Skipped (no teams table)
+- [ ] HIL email notifications: ☐ Configured (SMTP set) / ☐ Skipped (frontend panel only)
 
 ---
 

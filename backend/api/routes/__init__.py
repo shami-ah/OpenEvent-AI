@@ -12,6 +12,7 @@ CONTAINS:
     - test_data.py   Test data and Q&A (/api/test-data/*, /api/qna)
     - workflow.py    Workflow status (/api/workflow/*)
     - messages.py    Message and conversation handling (/api/send-message, /api/conversation/*)
+    - emails.py      Client email sending (/api/emails/*)
 
 MIGRATION STATUS:
     Phase C of refactoring - complete.
@@ -27,6 +28,7 @@ from .snapshots import router as snapshots_router
 from .test_data import router as test_data_router
 from .workflow import router as workflow_router
 from .messages import router as messages_router
+from .emails import router as emails_router
 
 __all__ = [
     "tasks_router",
@@ -38,4 +40,5 @@ __all__ = [
     "test_data_router",
     "workflow_router",
     "messages_router",
+    "emails_router",
 ]

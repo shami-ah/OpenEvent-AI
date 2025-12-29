@@ -717,16 +717,52 @@ def enqueue_hil_tasks(state: "WorkflowState", event_entry: Dict[str, Any]) -> No
             event_entry.get("event_id"),
             task_payload,
         )
-        pending_records.append(
-            {
-                "task_id": task_id,
-                "signature": signature,
-                "step": step_num,
-                "draft": dict(draft),
-                "thread_id": thread_id,
-            }
-        )
+        task_record = {
+            "task_id": task_id,
+            "signature": signature,
+            "step": step_num,
+            "draft": dict(draft),
+            "thread_id": thread_id,
+            "type": task_type.value if hasattr(task_type, 'value') else str(task_type),
+            "client_id": client_id,
+            "event_id": event_entry.get("event_id"),
+            "payload": task_payload,
+        }
+        pending_records.append(task_record)
         seen_signatures.add(signature)
         state.extras["persist"] = True
 
+        # Send email notification if enabled (async, non-blocking)
+        _notify_hil_email(task_record, event_entry)
+
     set_hil_open(thread_id, bool(pending_records))
+
+
+def _notify_hil_email(task: Dict[str, Any], event_entry: Dict[str, Any]) -> None:
+    """Send HIL email notification if enabled (non-blocking).
+
+    This is called when a HIL task is created to ALSO send an email
+    notification to the Event Manager (in addition to frontend panel).
+    """
+    try:
+        from backend.services.hil_email_notification import (
+            is_hil_email_enabled,
+            notify_hil_task_created,
+        )
+
+        if not is_hil_email_enabled():
+            return
+
+        result = notify_hil_task_created(task, event_entry)
+        if result:
+            if result.get("success"):
+                print(f"[HIL_EMAIL] Notification sent for task {task.get('task_id')}")
+            else:
+                print(f"[HIL_EMAIL] Failed to send: {result.get('error')}")
+
+    except ImportError:
+        # Email service not available - silently skip
+        pass
+    except Exception as e:
+        # Log but don't fail the HIL task creation
+        print(f"[HIL_EMAIL] Error sending notification: {e}")

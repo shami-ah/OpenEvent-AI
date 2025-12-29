@@ -3,10 +3,16 @@ MODULE: backend/api/routes/config.py
 PURPOSE: Configuration management endpoints.
 
 ENDPOINTS:
-    GET  /api/config/global-deposit  - Get global deposit config
-    POST /api/config/global-deposit  - Set global deposit config
-    GET  /api/config/hil-mode        - Get HIL mode status
-    POST /api/config/hil-mode        - Toggle HIL mode (all AI replies require approval)
+    GET  /api/config/global-deposit   - Get global deposit config
+    POST /api/config/global-deposit   - Set global deposit config
+    GET  /api/config/hil-mode         - Get HIL mode status
+    POST /api/config/hil-mode         - Toggle HIL mode (all AI replies require approval)
+    GET  /api/config/llm-provider     - Get LLM provider settings
+    POST /api/config/llm-provider     - Set LLM provider settings
+    GET  /api/config/pre-filter       - Get pre-filter mode (enhanced/legacy)
+    POST /api/config/pre-filter       - Set pre-filter mode
+    GET  /api/config/detection-mode   - Get detection mode (unified/legacy)
+    POST /api/config/detection-mode   - Set detection mode
 
 DEPENDS ON:
     - backend/workflow_email.py  # Database operations
@@ -64,6 +70,56 @@ class HILModeConfig(BaseModel):
     - Compliance: Ensure human review of all client communications
     """
     enabled: bool
+
+
+class LLMProviderConfig(BaseModel):
+    """
+    LLM provider configuration for per-operation routing.
+
+    Allows selecting different providers for different operations:
+    - intent: Provider for intent classification (gemini = 75% cheaper)
+    - entity: Provider for entity extraction (gemini = 75% cheaper)
+    - verbalization: Provider for draft composition (openai = better quality)
+
+    Valid providers: "openai", "gemini", "stub"
+
+    Defaults: Hybrid mode (Gemini for extraction, OpenAI for verbalization)
+    """
+    intent_provider: str = "gemini"       # Default: cheap, good accuracy
+    entity_provider: str = "gemini"       # Default: cheap, structured extraction
+    verbalization_provider: str = "openai"  # Default: quality for client-facing
+
+
+class PreFilterConfig(BaseModel):
+    """
+    Pre-filter mode configuration for per-message detection.
+
+    The pre-filter runs on EVERY message to detect signals before LLM calls.
+    This allows skipping unnecessary LLM calls and routing special cases.
+
+    Modes:
+    - "enhanced": Full keyword detection + signal flags (can skip LLM calls)
+    - "legacy": Basic duplicate detection only (always runs LLM)
+
+    Toggle this to fall back to regex-only if enhanced mode causes issues.
+    """
+    mode: str = "legacy"  # Default: safe legacy mode
+
+
+class DetectionModeConfig(BaseModel):
+    """
+    Detection mode configuration - unified vs legacy detection pipeline.
+
+    Modes:
+    - "unified": ONE LLM call per message that extracts intent + signals + entities
+                 (~$0.004/msg with Gemini, more accurate, no false positives)
+    - "legacy": Separate keyword pre-filter + intent LLM + entity LLM calls
+                (~$0.013/msg, can have regex false positives)
+
+    Use unified mode for best accuracy and cost savings.
+    Fall back to legacy if unified mode causes issues.
+    """
+    mode: str = "unified"  # Default: unified mode (recommended)
 
 
 class PromptConfig(BaseModel):
@@ -238,6 +294,370 @@ async def set_hil_mode(config: HILModeConfig):
     except Exception as exc:
         raise HTTPException(
             status_code=500, detail=f"Failed to save HIL mode config: {exc}"
+        ) from exc
+
+
+# ---------------------------------------------------------------------------
+# LLM Provider Configuration Endpoints
+# ---------------------------------------------------------------------------
+
+VALID_PROVIDERS = {"openai", "gemini", "stub"}
+
+
+@router.get("/llm-provider")
+async def get_llm_provider_config():
+    """
+    Get the current LLM provider configuration.
+
+    Returns provider settings for each operation type:
+    - intent_provider: For intent classification
+    - entity_provider: For entity extraction
+    - verbalization_provider: For draft composition
+
+    Priority order:
+    1. Database setting (if set) - allows runtime toggle via admin UI
+    2. Environment variables (INTENT_PROVIDER, ENTITY_PROVIDER, VERBALIZER_PROVIDER)
+    3. AGENT_MODE environment variable - sets all operations to same provider
+    4. "openai" - default fallback
+
+    Returns:
+        intent_provider, entity_provider, verbalization_provider: str
+        source: str - Where the settings came from
+    """
+    import os
+
+    try:
+        db = wf_load_db()
+        llm_config = db.get("config", {}).get("llm_provider", {})
+
+        # Check database first
+        if llm_config.get("intent_provider") or llm_config.get("entity_provider"):
+            return {
+                "intent_provider": llm_config.get("intent_provider", "openai"),
+                "entity_provider": llm_config.get("entity_provider", "openai"),
+                "verbalization_provider": llm_config.get("verbalization_provider", "openai"),
+                "source": "database",
+                "updated_at": llm_config.get("updated_at"),
+            }
+
+        # Fall back to environment variables
+        # Default: Hybrid mode (Gemini for extraction, OpenAI for verbalization)
+        agent_mode = os.getenv("AGENT_MODE", "gemini").lower()
+        intent_provider = os.getenv("INTENT_PROVIDER", agent_mode)
+        entity_provider = os.getenv("ENTITY_PROVIDER", agent_mode)
+        verbalization_provider = os.getenv("VERBALIZER_PROVIDER", "openai")
+
+        return {
+            "intent_provider": intent_provider,
+            "entity_provider": entity_provider,
+            "verbalization_provider": verbalization_provider,
+            "source": "environment",
+        }
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load LLM provider config: {exc}"
+        ) from exc
+
+
+@router.post("/llm-provider")
+async def set_llm_provider_config(config: LLMProviderConfig):
+    """
+    Set the LLM provider configuration.
+
+    Allows selecting different providers for different operations:
+    - intent_provider: gemini = 75% cheaper, good accuracy
+    - entity_provider: gemini = 75% cheaper, good for structured extraction
+    - verbalization_provider: openai recommended for quality-critical drafts
+
+    Valid providers: "openai", "gemini", "stub"
+
+    This setting persists in the database and takes effect on next request.
+    It overrides environment variables.
+
+    COST COMPARISON:
+    | Operation | OpenAI (o3-mini) | Gemini Flash | Savings |
+    |-----------|------------------|--------------|---------|
+    | Intent    | ~$0.005          | ~$0.00125    | 75%     |
+    | Entity    | ~$0.008          | ~$0.002      | 75%     |
+    | Verbalize | ~$0.015          | ~$0.004      | 73%     |
+    """
+    import os
+
+    # Validate providers
+    for field, value in [
+        ("intent_provider", config.intent_provider),
+        ("entity_provider", config.entity_provider),
+        ("verbalization_provider", config.verbalization_provider),
+    ]:
+        if value.lower() not in VALID_PROVIDERS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid {field}: '{value}'. Must be one of: {', '.join(VALID_PROVIDERS)}"
+            )
+
+    try:
+        db = wf_load_db()
+        if "config" not in db:
+            db["config"] = {}
+
+        db["config"]["llm_provider"] = {
+            "intent_provider": config.intent_provider.lower(),
+            "entity_provider": config.entity_provider.lower(),
+            "verbalization_provider": config.verbalization_provider.lower(),
+            "updated_at": _now_iso(),
+        }
+        wf_save_db(db)
+
+        # Update environment variables for current process
+        # (takes effect on next adapter instantiation)
+        os.environ["INTENT_PROVIDER"] = config.intent_provider.lower()
+        os.environ["ENTITY_PROVIDER"] = config.entity_provider.lower()
+        os.environ["VERBALIZER_PROVIDER"] = config.verbalization_provider.lower()
+
+        # Reset the agent adapter singleton to pick up new settings
+        from backend.adapters.agent_adapter import reset_agent_adapter
+        reset_agent_adapter()
+
+        print(f"[Config] LLM providers updated: intent={config.intent_provider} entity={config.entity_provider} verbalization={config.verbalization_provider}")
+
+        return {
+            "status": "ok",
+            "intent_provider": config.intent_provider.lower(),
+            "entity_provider": config.entity_provider.lower(),
+            "verbalization_provider": config.verbalization_provider.lower(),
+            "message": "LLM provider settings updated. Changes take effect on next request.",
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save LLM provider config: {exc}"
+        ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Prompt Configuration Endpoints
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Pre-Filter Configuration Endpoints
+# ---------------------------------------------------------------------------
+
+VALID_PRE_FILTER_MODES = {"enhanced", "legacy"}
+
+
+@router.get("/pre-filter")
+async def get_pre_filter_config():
+    """
+    Get the current pre-filter mode configuration.
+
+    Pre-filter runs on EVERY message before LLM calls to detect:
+    - Duplicate messages
+    - Language
+    - Confirmation/acceptance/rejection signals
+    - Manager escalation requests
+    - Billing address patterns
+    - Urgency markers
+
+    Modes:
+    - "enhanced": Full keyword detection, can skip unnecessary LLM calls
+    - "legacy": Basic duplicate detection only, always runs LLM (safe fallback)
+
+    Priority order:
+    1. Database setting (if set) - allows runtime toggle via admin UI
+    2. Environment variable PRE_FILTER_MODE
+    3. "legacy" - safe default
+
+    Returns:
+        mode: str - Current pre-filter mode
+        source: str - Where the setting came from
+    """
+    import os
+
+    try:
+        db = wf_load_db()
+        pre_filter_config = db.get("config", {}).get("pre_filter", {})
+
+        # Check database first
+        if pre_filter_config.get("mode"):
+            return {
+                "mode": pre_filter_config["mode"],
+                "source": "database",
+                "updated_at": pre_filter_config.get("updated_at"),
+            }
+
+        # Fall back to environment variable
+        env_mode = os.getenv("PRE_FILTER_MODE", "legacy").lower()
+        if env_mode in VALID_PRE_FILTER_MODES:
+            return {"mode": env_mode, "source": "environment"}
+
+        # Default
+        return {"mode": "legacy", "source": "default"}
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load pre-filter config: {exc}"
+        ) from exc
+
+
+@router.post("/pre-filter")
+async def set_pre_filter_config(config: PreFilterConfig):
+    """
+    Set the pre-filter mode configuration.
+
+    Toggle between enhanced and legacy modes for per-message detection:
+    - "enhanced": Full keyword detection with LLM skip optimization
+    - "legacy": Safe fallback, basic duplicate detection only
+
+    Use "legacy" mode if enhanced mode causes false positives or issues.
+    Switch to "enhanced" once confident in keyword detection accuracy.
+
+    COST IMPACT:
+    - Legacy: Always runs intent LLM (~$0.005/msg)
+    - Enhanced: Can skip ~25% of intent LLM calls (saves ~$0.00125/msg)
+
+    This setting persists in the database and takes effect immediately.
+    """
+    import os
+
+    # Validate mode
+    if config.mode.lower() not in VALID_PRE_FILTER_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid mode: '{config.mode}'. Must be one of: {', '.join(VALID_PRE_FILTER_MODES)}"
+        )
+
+    try:
+        db = wf_load_db()
+        if "config" not in db:
+            db["config"] = {}
+
+        db["config"]["pre_filter"] = {
+            "mode": config.mode.lower(),
+            "updated_at": _now_iso(),
+        }
+        wf_save_db(db)
+
+        # Update environment variable for current process
+        os.environ["PRE_FILTER_MODE"] = config.mode.lower()
+
+        print(f"[Config] Pre-filter mode updated: {config.mode}")
+
+        return {
+            "status": "ok",
+            "mode": config.mode.lower(),
+            "message": f"Pre-filter mode set to '{config.mode}'. "
+                      f"{'Full keyword detection enabled.' if config.mode == 'enhanced' else 'Safe legacy mode, always runs LLM.'}",
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save pre-filter config: {exc}"
+        ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Detection Mode Configuration Endpoints
+# ---------------------------------------------------------------------------
+
+VALID_DETECTION_MODES = {"unified", "legacy"}
+
+
+@router.get("/detection-mode")
+async def get_detection_mode_config():
+    """
+    Get the current detection mode configuration.
+
+    Detection mode controls how messages are analyzed:
+    - "unified": ONE LLM call for intent + signals + entities (~$0.004/msg)
+    - "legacy": Separate keyword + intent + entity calls (~$0.013/msg)
+
+    Priority order:
+    1. Database setting (if set) - allows runtime toggle via admin UI
+    2. Environment variable DETECTION_MODE
+    3. "unified" - recommended default
+
+    Returns:
+        mode: str - Current detection mode
+        source: str - Where the setting came from
+    """
+    import os
+
+    try:
+        db = wf_load_db()
+        detection_config = db.get("config", {}).get("detection_mode", {})
+
+        # Check database first
+        if detection_config.get("mode"):
+            return {
+                "mode": detection_config["mode"],
+                "source": "database",
+                "updated_at": detection_config.get("updated_at"),
+            }
+
+        # Fall back to environment variable
+        env_mode = os.getenv("DETECTION_MODE", "unified").lower()
+        if env_mode in VALID_DETECTION_MODES:
+            return {"mode": env_mode, "source": "environment"}
+
+        # Default
+        return {"mode": "unified", "source": "default"}
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load detection mode config: {exc}"
+        ) from exc
+
+
+@router.post("/detection-mode")
+async def set_detection_mode_config(config: DetectionModeConfig):
+    """
+    Set the detection mode configuration.
+
+    Toggle between unified and legacy detection pipelines:
+    - "unified": ONE LLM call for everything (~$0.004/msg, recommended)
+    - "legacy": Separate calls (keyword + intent + entity)
+
+    COST COMPARISON:
+    | Mode    | Cost/msg | Accuracy | Notes                        |
+    |---------|----------|----------|------------------------------|
+    | unified | $0.004   | High     | Single Gemini call, no regex |
+    | legacy  | $0.013   | Medium   | Regex can have false pos     |
+
+    This setting persists in the database and takes effect immediately.
+    """
+    import os
+
+    # Validate mode
+    if config.mode.lower() not in VALID_DETECTION_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid mode: '{config.mode}'. Must be one of: {', '.join(VALID_DETECTION_MODES)}"
+        )
+
+    try:
+        db = wf_load_db()
+        if "config" not in db:
+            db["config"] = {}
+
+        db["config"]["detection_mode"] = {
+            "mode": config.mode.lower(),
+            "updated_at": _now_iso(),
+        }
+        wf_save_db(db)
+
+        # Update environment variable for current process
+        os.environ["DETECTION_MODE"] = config.mode.lower()
+
+        print(f"[Config] Detection mode updated: {config.mode}")
+
+        return {
+            "status": "ok",
+            "mode": config.mode.lower(),
+            "message": f"Detection mode set to '{config.mode}'. "
+                      f"{'One LLM call per message (recommended).' if config.mode == 'unified' else 'Separate keyword + intent + entity calls.'}",
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save detection mode config: {exc}"
         ) from exc
 
 
@@ -447,3 +867,157 @@ async def revert_prompts_config(index: int):
 #         raise HTTPException(
 #             status_code=500, detail=f"Failed to save room deposit config: {exc}"
 #         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# HIL Email Notification Configuration
+# ---------------------------------------------------------------------------
+
+class HILEmailConfig(BaseModel):
+    """
+    HIL email notification configuration.
+
+    When enabled, sends email notifications to the Event Manager
+    when HIL tasks are created (in addition to the frontend panel).
+
+    PRODUCTION NOTE:
+    The manager_email should come from Supabase auth (logged-in user).
+    This config serves as a fallback or for testing environments.
+    """
+    enabled: bool = False
+    manager_email: Optional[str] = None  # Fallback; production uses Supabase auth
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_user: Optional[str] = None
+    from_email: Optional[str] = None
+
+
+@router.get("/hil-email")
+async def get_hil_email_config():
+    """
+    Get the current HIL email notification configuration.
+
+    HIL email notifications send emails to the Event Manager when
+    tasks require approval. This works IN ADDITION to the frontend
+    Manager Tasks panel.
+
+    Returns:
+        enabled: bool - Whether email notifications are active
+        manager_email: str - Email to notify (from config or Supabase)
+        smtp_configured: bool - Whether SMTP is ready
+        source: str - Where the config came from
+    """
+    try:
+        from backend.services.hil_email_notification import get_hil_email_config as get_email_config
+        config = get_email_config()
+
+        return {
+            "enabled": config["enabled"],
+            "manager_email": config["manager_email"],
+            "smtp_configured": bool(config["smtp_user"] and config["smtp_password"]),
+            "smtp_host": config["smtp_host"],
+            "from_email": config["from_email"],
+            "source": "database" if config["manager_email"] else "environment",
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load HIL email config: {exc}"
+        ) from exc
+
+
+@router.post("/hil-email")
+async def set_hil_email_config(config: HILEmailConfig):
+    """
+    Set the HIL email notification configuration.
+
+    Enable email notifications when HIL tasks are created:
+    - enabled: Toggle email notifications
+    - manager_email: Email to receive notifications
+
+    SMTP settings can also be configured here, or via environment:
+    - SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD
+    - HIL_FROM_EMAIL, HIL_FROM_NAME
+
+    PRODUCTION NOTE:
+    In production, manager_email should come from Supabase auth
+    (the logged-in Event Manager). This endpoint is for testing
+    or as a fallback.
+    """
+    try:
+        db = wf_load_db()
+        if "config" not in db:
+            db["config"] = {}
+
+        hil_email_data = {
+            "enabled": config.enabled,
+            "updated_at": _now_iso(),
+        }
+
+        if config.manager_email:
+            hil_email_data["manager_email"] = config.manager_email
+        if config.smtp_host:
+            hil_email_data["smtp_host"] = config.smtp_host
+        if config.smtp_port:
+            hil_email_data["smtp_port"] = config.smtp_port
+        if config.smtp_user:
+            hil_email_data["smtp_user"] = config.smtp_user
+        if config.from_email:
+            hil_email_data["from_email"] = config.from_email
+
+        db["config"]["hil_email"] = hil_email_data
+        wf_save_db(db)
+
+        status = "enabled" if config.enabled else "disabled"
+        print(f"[Config] HIL email {status} - notifications to {config.manager_email}")
+
+        return {
+            "status": "ok",
+            "enabled": config.enabled,
+            "manager_email": config.manager_email,
+            "message": f"HIL email notifications {status}."
+                      + (f" Notifications will be sent to {config.manager_email}" if config.enabled else ""),
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save HIL email config: {exc}"
+        ) from exc
+
+
+@router.post("/hil-email/test")
+async def test_hil_email():
+    """
+    Send a test HIL email notification.
+
+    Use this to verify email configuration is working correctly.
+    """
+    try:
+        from backend.services.hil_email_notification import (
+            is_hil_email_enabled,
+            send_hil_notification,
+        )
+
+        if not is_hil_email_enabled():
+            return {
+                "success": False,
+                "error": "HIL email not enabled. Configure via POST /api/config/hil-email first.",
+            }
+
+        result = send_hil_notification(
+            task_id="test-" + _now_iso().replace(":", "-"),
+            task_type="test_notification",
+            client_name="Test Client",
+            client_email="test@example.com",
+            draft_body="This is a test HIL notification.\n\nIf you received this, email notifications are working correctly!",
+            event_summary={
+                "chosen_date": "2026-01-15",
+                "locked_room": "Test Room",
+                "offer_total": 1500.00,
+            },
+        )
+
+        return result
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to send test email: {exc}"
+        ) from exc

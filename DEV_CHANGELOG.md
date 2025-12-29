@@ -2,6 +2,128 @@
 
 ## 2025-12-29
 
+### Billing Address Persistence Fix (Session 6)
+
+**Summary:** Fixed critical bug where billing address was lost before being saved to database.
+
+**Root Cause:**
+In `confirmation_gate.py:auto_continue_if_ready()`, line 237 called `event_entry.update(fresh_entry)` which reloaded ALL fields from the database. This overwrote the billing address captured in memory (from the user's message) with the stale "Not Specified" value from the database BEFORE the save happened.
+
+**Flow of the bug:**
+1. Client sends billing address → stored in memory
+2. Step 5 calls `check_confirmation_gate()` → checks if ready for HIL
+3. `auto_continue_if_ready()` reloads from database → OVERWRITES billing in memory
+4. Handler returns → save happens with OVERWRITTEN data
+5. Result: billing address is "Not Specified" in database
+
+**Fix:**
+Changed `auto_continue_if_ready()` to only sync deposit-related fields from the database, NOT the full event entry:
+```python
+# OLD (broken):
+event_entry.update(fresh_entry)  # Overwrites EVERYTHING
+
+# NEW (fixed):
+if fresh_entry.get("deposit_info"):
+    event_entry["deposit_info"] = fresh_entry["deposit_info"]
+if fresh_entry.get("deposit_state"):
+    event_entry["deposit_state"] = fresh_entry["deposit_state"]
+```
+
+**Files Modified:**
+- `backend/workflows/common/confirmation_gate.py` - Fixed `auto_continue_if_ready()`
+
+**E2E Verified:**
+- Billing address now properly persisted with all parsed fields
+- Deposit payment flow continues correctly
+
+---
+
+### HIL Email Notification System (Session 5)
+
+**Summary:** Added email notification system for HIL tasks. When tasks require manager approval, emails are now sent IN ADDITION to the frontend panel.
+
+**New Features:**
+
+1. **HIL Email Notification Service** (`backend/services/hil_email_notification.py`)
+   - Sends email to Event Manager when HIL tasks are created
+   - HTML and plain text templates with event details
+   - Non-blocking (won't fail HIL task creation if email fails)
+   - Configurable via API or environment variables
+
+2. **Email Configuration Endpoints** (`/api/config/hil-email`)
+   - `GET /api/config/hil-email` - Get current config
+   - `POST /api/config/hil-email` - Enable/configure notifications
+   - `POST /api/config/hil-email/test` - Send test email
+
+3. **Client Email Endpoints** (`/api/emails/*`)
+   - `POST /api/emails/send-to-client` - Send email after HIL approval
+   - `POST /api/emails/send-offer` - Send offer email
+   - `POST /api/emails/test` - Test SMTP configuration
+
+4. **HIL Task Hook**
+   - Email notification integrated into `enqueue_hil_tasks()`
+   - Automatically sends email when HIL task is created (if enabled)
+
+**Configuration:**
+```bash
+# Environment variables
+EVENT_MANAGER_EMAIL=manager@atelier.ch
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+HIL_FROM_EMAIL=openevent@atelier.ch
+HIL_FROM_NAME=OpenEvent AI
+FRONTEND_URL=http://localhost:3000
+```
+
+**Production Note:**
+Manager email should come from Supabase auth (logged-in user).
+The config endpoint serves as fallback for testing.
+
+**Files Added:**
+- `backend/services/hil_email_notification.py` (NEW)
+- `backend/api/routes/emails.py` (NEW)
+
+**Files Modified:**
+- `backend/api/routes/__init__.py` - Added emails_router
+- `backend/api/routes/config.py` - Added HIL email config endpoints
+- `backend/workflows/runtime/hil_tasks.py` - Added email notification hook
+- `backend/main.py` - Registered emails_router
+
+---
+
+### Test Coverage Matrix + Message Ordering Fix (Session 4)
+
+**Summary:** Created comprehensive test coverage matrix documenting all tested scenarios for detours, Q&A, shortcuts, and HIL. Fixed message ordering per UX principle.
+
+**Documentation Added:**
+- `docs/internal/TEST_COVERAGE_MATRIX.md` - Complete test coverage matrix with:
+  - All detour detection scenarios (60+ tests)
+  - Q&A detection coverage (20+ tests)
+  - Shortcut capture tests (15+ tests)
+  - HIL flow tests (20+ tests)
+  - Coverage gaps identified
+  - Production HIL email routing plan
+
+**UX Fix - Message Ordering:**
+- Conversational message now comes FIRST, summary/links at END
+- Before: "Rooms for 30 people...\n[link]\n\nGreat news! Room A is available..."
+- After: "Great news! Room A is available...\n\n[link to room details]"
+- Applied to `step3_handler.py` room availability messages
+
+**Coverage Gaps Identified (High Priority):**
+1. Detour changes at Step 4/5 (date, room, capacity during offer/negotiation)
+2. Q&A bypass during billing/deposit flows
+3. Production email notification for HIL
+4. One-click approval tokens for email
+
+**Files Modified:**
+- `backend/workflows/steps/step3_room_availability/trigger/step3_handler.py`
+- `docs/internal/TEST_COVERAGE_MATRIX.md` (NEW)
+
+---
+
 ### No Tables in Chat + Design Principle Documentation (Session 3)
 
 **Summary:** Removed markdown tables from chat messages per UX design principle. Tables belong in info pages, not in conversational chat/email.

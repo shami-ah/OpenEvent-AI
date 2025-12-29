@@ -59,6 +59,7 @@ from backend.api.routes import (
     test_data_router,
     workflow_router,
     messages_router,
+    emails_router,
 )
 
 @asynccontextmanager
@@ -94,6 +95,7 @@ app.include_router(snapshots_router)
 app.include_router(test_data_router)
 app.include_router(workflow_router)
 app.include_router(messages_router)
+app.include_router(emails_router)
 
 DEBUG_TRACE_ENABLED = is_trace_enabled()
 
