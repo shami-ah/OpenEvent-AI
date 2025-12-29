@@ -253,7 +253,7 @@ def maybe_emit_date_options_answer(planner: "_ShortcutPlanner") -> Optional["Pla
         for idx, option in enumerate(options, start=1):
             lines.append(f"{idx}) {option}")
     else:
-        lines.append("No availability in the next 45 days — share another window and I'll check.")
+        lines.append("No availability in the next 45 days. Share another window and I'll check.")
 
     lines.append("")
     option_count = len(options)

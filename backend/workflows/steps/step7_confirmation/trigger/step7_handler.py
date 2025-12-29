@@ -285,7 +285,7 @@ def _prepare_confirmation(state: WorkflowState, event_entry: Dict[str, Any]) -> 
     room_fragment = f" for {room_name}" if room_name else ""
     date_fragment = f" on {event_date}" if event_date else ""
     final_message = (
-        f"Wonderful — we're ready to proceed with your booking{room_fragment}{date_fragment}. "
+        f"Wonderful, we're ready to proceed with your booking{room_fragment}{date_fragment}. "
         "I'll place the booking and send a confirmation message shortly."
     )
     draft = {
@@ -405,7 +405,7 @@ def _handle_question(state: WorkflowState) -> GroupResult:
     """Handle general questions or unclear messages."""
     draft = {
         "body": append_footer(
-            "Happy to help — could you share a bit more detail so I can advise?",
+            "Happy to help. Could you share a bit more detail so I can advise?",
             step=7,
             next_step="Provide details",
             thread_state="Awaiting Client",

@@ -737,9 +737,13 @@ def process(state: WorkflowState) -> GroupResult:
         for p in wish_products
     )
     if not has_catering_request:
-        # Add brief catering teaser - prices from products.json (CHF 18-28/person for apéro)
+        # Elegant catering teaser with popular options
+        # Popular packages: Classic Apéro (CHF 18), Premium Apéro (CHF 28), Coffee Bar (CHF 7.50)
+        intro_lines.append("")  # Add paragraph break
         intro_lines.append(
-            "We also offer catering packages (from CHF 18/person) if you'd like to add refreshments."
+            "Would you like to add catering? Our Classic Apéro (CHF 18/person) and "
+            "Coffee & Tea service (CHF 7.50/person) are popular choices. "
+            "See the full menu in the info page."
         )
 
     # body_markdown = ONLY conversational prose (structured data is in table_blocks)

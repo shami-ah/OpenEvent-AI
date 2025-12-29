@@ -172,7 +172,7 @@ def get_next_prompt(status: GateStatus, step: int = 5) -> Optional[Dict[str, Any
     # Prioritize: billing first if both missing (arbitrary but consistent)
     if not status.billing_complete:
         prompt = (
-            "Thanks for confirming — I need the billing address before I can send this for approval.\n"
+            "Thanks for confirming. I need the billing address before I can send this for approval.\n"
             f"{billing_prompt_for_missing_fields(status.billing_missing)} "
             'Example: "Helvetia Labs, Bahnhofstrasse 1, 8001 Zurich, Switzerland". '
             "As soon as I have it, I'll forward the offer automatically."

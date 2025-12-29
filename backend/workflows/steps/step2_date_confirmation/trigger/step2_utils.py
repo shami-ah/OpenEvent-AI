@@ -576,7 +576,7 @@ def format_room_availability(entries: List[Dict[str, Any]]) -> List[str]:
                 label = f"{date_label} ({status})"
             formatted.append(label)
         if formatted:
-            lines.append(f"{room} — Available on: {', '.join(formatted)}")
+            lines.append(f"{room}: Available on {', '.join(formatted)}")
     return lines
 
 

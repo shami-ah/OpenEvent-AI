@@ -219,7 +219,7 @@ def _normalise_next_step_line(block_text: Optional[str], *, default_line: str = 
     line = f"- {candidate}"
     if "fast-track" not in line.lower():
         stripped = line.rstrip(".")
-        line = stripped + " — mention any other confirmed details (room/setup, catering) and I'll fast-track the next workflow step for you."
+        line = stripped + ". Mention any other confirmed details (room/setup, catering) and I'll fast-track the next workflow step for you."
     return line
 
 
@@ -330,7 +330,7 @@ def _catering_recommendations(preferences: Dict[str, Any]) -> List[str]:
         if matched:
             descriptor = matched.get("description") or matched.get("category") or "Package"
             price = matched.get("price_per_person") or matched.get("price")
-            price_text = f" — CHF {price}" if price else ""
+            price_text = f" (CHF {price})" if price else ""
             selections.append(f"- {matched.get('name')}{price_text}: {descriptor}.")
         else:
             selections.append(f"- {label}.")
@@ -400,7 +400,7 @@ def _build_room_and_catering_sections(
         for rec in room_recs:
             bullet = f"- {rec['name']}"
             if rec["summary"]:
-                bullet += f" — {rec['summary']}"
+                bullet += f": {rec['summary']}"
             lines.append(bullet)
         sections.append("Rooms & Setup\n" + "\n".join(lines))
         headers.append("Rooms & Setup")
@@ -740,12 +740,12 @@ def _collect_room_rows(
             row["room"] = room_name
         if "menu" in select_fields:
             menus = sorted(payload["menus"])
-            row["menu"] = ", ".join(menus) if menus else "—"
+            row["menu"] = ", ".join(menus) if menus else "-"
         dates_sorted = sorted(payload["dates"], key=_date_sort_key)
-        row["dates"] = ", ".join(dates_sorted) if dates_sorted else "—"
+        row["dates"] = ", ".join(dates_sorted) if dates_sorted else "-"
         variation["dates"].add(tuple(dates_sorted))
         notes_list = payload["notes"]
-        row["notes"] = "; ".join(notes_list) if notes_list else "—"
+        row["notes"] = "; ".join(notes_list) if notes_list else "-"
         rows.append(row)
 
     return rows, dict(variation)
@@ -793,8 +793,8 @@ def _collect_menu_rows(
             notes = "; ".join(_dedup_preserve_order(notes_bits))
             rows.append({
                 "menu": name,
-                "notes": notes or "—",
-                "dates": ", ".join(display_dates) if display_dates else "—",
+                "notes": notes or "-",
+                "dates": ", ".join(display_dates) if display_dates else "-",
             })
             seen.add(key)
 
@@ -814,14 +814,14 @@ def _collect_menu_rows(
         notes = "; ".join(_dedup_preserve_order(notes_bits))
         rows.append({
             "menu": name,
-            "notes": notes or "—",
-            "dates": ", ".join(display_dates) if display_dates else "—",
+            "notes": notes or "-",
+            "dates": ", ".join(display_dates) if display_dates else "-",
         })
         seen.add(key)
 
     for row in rows:
-        row.setdefault("notes", "—")
-        row.setdefault("dates", ", ".join(display_dates) if display_dates else "—")
+        row.setdefault("notes", "-")
+        row.setdefault("dates", ", ".join(display_dates) if display_dates else "-")
 
     return rows, dict(variation)
 
@@ -836,10 +836,10 @@ def _compute_column_plan(
     constants: Dict[str, Any] = {}
 
     for field in select_fields:
-        if any(row.get(field) not in (None, "", "—") for row in rows):
+        if any(row.get(field) not in (None, "", "-") for row in rows):
             column_order.append(field)
 
-    has_dates = any(row.get("dates") not in (None, "", "—") for row in rows)
+    has_dates = any(row.get("dates") not in (None, "", "-") for row in rows)
     date_variations = {tuple(val) for val in variation.get("dates", set()) if val}
     if date_variations or has_dates:
         if "dates" not in column_order:
@@ -888,8 +888,8 @@ def _render_markdown_table(
     for row in rows:
         cells: List[str] = []
         for field in column_order:
-            value = row.get(field, "—")
-            cell = str(value if value not in (None, "") else "—")
+            value = row.get(field, "-")
+            cell = str(value if value not in (None, "") else "-")
             cells.append(cell)
         lines.append("| " + " | ".join(cells) + " |")
     return lines
@@ -1176,8 +1176,8 @@ def enrich_general_qna_step2(state: WorkflowState, classification: Dict[str, Any
     for row in table_rows:
         display_row: Dict[str, str] = {}
         for field in column_order:
-            value = row.get(field, "—")
-            display_row[field] = str(value if value not in (None, "") else "—")
+            value = row.get(field, "-")
+            display_row[field] = str(value if value not in (None, "") else "-")
         display_rows.append(display_row)
 
     table_lines = _render_markdown_table(display_rows, column_order, select_fields)
@@ -1423,8 +1423,8 @@ def _structured_table_blocks(db_summary: Dict[str, Any]) -> List[Dict[str, Any]]
         rows.append(
             {
                 "Room": name,
-                "Dates": ", ".join(sorted(payload["dates"])) if payload["dates"] else "—",
-                "Notes": "; ".join(sorted(payload["notes"])) if payload["notes"] else "—",
+                "Dates": ", ".join(sorted(payload["dates"])) if payload["dates"] else "-",
+                "Notes": "; ".join(sorted(payload["notes"])) if payload["notes"] else "-",
             }
         )
     if not rows:

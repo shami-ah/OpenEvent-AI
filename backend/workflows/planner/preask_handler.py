@@ -200,7 +200,7 @@ def handle_preask_responses(planner: "_ShortcutPlanner", text: str) -> None:
             planner.preask_pending_state[class_name] = False
             planner.telemetry.preask_response[class_name] = "no"
             planner.telemetry.re_prompt_reason = "none"
-            planner.preask_ack_lines.append(f"Noted — I'll skip {class_name} options for now.")
+            planner.preask_ack_lines.append(f"Noted, I'll skip {class_name} options for now.")
         elif response == "clarify":
             if class_name not in planner.preask_clarifications:
                 planner.preask_clarifications.append(class_name)

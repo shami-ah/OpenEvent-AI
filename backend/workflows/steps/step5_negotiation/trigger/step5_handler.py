@@ -509,8 +509,8 @@ def process(state: WorkflowState) -> GroupResult:
                 negotiation_state["manual_review_task_id"] = manual_id
             draft = {
                 "body": append_footer(
-                    "Thanks for the suggestions — I’ve escalated this to our manager to review pricing. "
-                    "We’ll get back to you shortly.",
+                    "Thanks for the suggestions. I've escalated this to our manager to review pricing. "
+                    "We'll get back to you shortly.",
                     step=5,
                     next_step=5,
                     thread_state="Awaiting Client Response",
@@ -562,7 +562,7 @@ def process(state: WorkflowState) -> GroupResult:
     # Clarification by default.
     clarification = {
         "body": append_footer(
-            "Happy to clarify any part of the proposal — let me know which detail you’d like more information on.",
+            "Happy to clarify any part of the proposal. Let me know which detail you'd like more information on.",
             step=5,
             next_step=5,
             thread_state="Awaiting Client Response",
@@ -941,7 +941,7 @@ def _offer_summary_lines(event_entry: Dict[str, Any], *, include_cta: bool = Tru
     intro_date = chosen_date if chosen_date != "Date TBD" else "your requested date"
     lines: list[str] = []
     if manager_requested:
-        lines.append(f"Great — {intro_room} on {intro_date} is ready for manager review.")
+        lines.append(f"Great, {intro_room} on {intro_date} is ready for manager review.")
     lines.append(f"Offer draft for {chosen_date} · {room}")
     lines.append("")
 
@@ -1125,7 +1125,7 @@ def _handle_decline(event_entry: Dict[str, Any]) -> Dict[str, Any]:
     event_entry["offer_status"] = "Declined"
     return {
         "body": append_footer(
-            "Thank you for letting me know. I’ve noted the cancellation — we’d be happy to help with future events anytime.",
+            "Thank you for letting me know. I've noted the cancellation. We'd be happy to help with future events anytime.",
             step=5,
             next_step=7,
             thread_state="In Progress",

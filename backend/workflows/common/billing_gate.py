@@ -95,7 +95,7 @@ def billing_prompt_draft(missing_fields: List[str], *, step: int) -> Dict[str, A
         Draft message dict with body_markdown, step, topic, etc.
     """
     prompt = (
-        "Thanks for confirming — I need the billing address before I can send this for approval.\n"
+        "Thanks for confirming. I need the billing address before I can send this for approval.\n"
         f"{billing_prompt_for_missing_fields(missing_fields)} "
         'Example: "Helvetia Labs, Bahnhofstrasse 1, 8001 Zurich, Switzerland". '
         "As soon as I have it, I'll forward the offer automatically."

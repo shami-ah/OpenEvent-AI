@@ -68,10 +68,10 @@ def missing_item_display(item: Dict[str, Any]) -> str:
         item: Dict with 'name' key
 
     Returns:
-        Display string like "Champagne — price pending (via manager)"
+        Display string like "Champagne - price pending (via manager)"
     """
     name = str(item.get("name") or "the item").strip() or "the item"
-    return f"{name} — price pending (via manager)"
+    return f"{name} - price pending (via manager)"
 
 
 # --------------------------------------------------------------------------
@@ -193,18 +193,18 @@ def format_product_line(planner: "_ShortcutPlanner", detail: Dict[str, Any]) -> 
         detail: Product detail dict with name, quantity, unit_price, etc.
 
     Returns:
-        Formatted line like "• Champagne — 2 × CHF 75 = CHF 150"
+        Formatted line like "• Champagne: 2 × CHF 75 = CHF 150"
     """
     name = detail.get("name") or "Unnamed item"
     quantity = detail.get("quantity") or 1
     unit_price = detail.get("unit_price")
     currency = detail.get("currency") or _budget_default_currency()
     if unit_price is None:
-        return f"• {name} — {quantity} × TBD (price pending)"
+        return f"• {name}: {quantity} × TBD (price pending)"
     subtotal = detail.get("subtotal")
     unit_str = format_money(unit_price, currency)
     subtotal_str = format_money(subtotal or 0.0, currency)
-    return f"• {name} — {quantity} × {unit_str} = {subtotal_str}"
+    return f"• {name}: {quantity} × {unit_str} = {subtotal_str}"
 
 
 def product_subtotal_lines(planner: "_ShortcutPlanner") -> List[str]:

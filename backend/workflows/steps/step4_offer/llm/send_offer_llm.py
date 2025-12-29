@@ -79,14 +79,14 @@ class ChatFollowUp(LLMNode):
         deposit_percent = payload.get("deposit_percent")
 
         message_parts: List[str] = [
-            "Thanks for sending all the details — we now have everything we need.",
-            "I’ve just sent you an initial offer by email based on your selected options.",
+            "Thanks for sending all the details. We now have everything we need.",
+            "I've just sent you an initial offer by email based on your selected options.",
             "If you'd like, we can place an initial reservation for this date.",
         ]
 
         if visit_allowed:
             message_parts.append(
-                f"We can also arrange a viewing — please propose 2–3 times that work for you; "
+                f"We can also arrange a viewing. Please propose 2-3 times that work for you; "
                 f"our working hours are {working_hours['start']}–{working_hours['end']}."
             )
 

@@ -223,7 +223,7 @@ def format_menu_line(menu: Dict[str, Any], *, month_hint: Optional[str] = None) 
         if clean and clean not in notes_deduped:
             notes_deduped.append(clean)
 
-    line = f"- {name} — {price_text} per guest"
+    line = f"- {name}: {price_text} per guest"
     if notes_deduped:
         line += f" ({'; '.join(notes_deduped)})"
     line += "."
@@ -269,7 +269,7 @@ def format_menu_line_short(menu: Dict[str, Any]) -> str:
     price_text = _normalise_price(menu.get("price"))
     # Keep it minimal: name + price + "Rooms: all" indicator
     suffix = " per event" if price_text and "per" not in price_text.lower() else ""
-    return f"- {name} — {price_text}{suffix} (Rooms: all)"
+    return f"- {name}: {price_text}{suffix} (Rooms: all)"
 
 
 def build_menu_payload(

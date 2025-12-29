@@ -784,7 +784,7 @@ class HandlePostOfferRoute(OpenEventAction):
             status_label = _current_status_label(event_data)
             message = (
                 "Thanks for confirming the event! "
-                f"Status: {status_label} — once the deposit arrives I’ll lock everything in. "
+                f"Status: {status_label}. Once the deposit arrives I'll lock everything in. "
                 "Feel free to share any questions or tweaks in the meantime."
             )
             note = "confirm: awaiting-deposit"
@@ -795,8 +795,8 @@ class HandlePostOfferRoute(OpenEventAction):
             _set_manager_status(event_data, "pending")
             status_label = _current_status_label(event_data)
             message = (
-                "Great — I’ve marked the event as a provisional Option and passed it to our manager for a quick review. "
-                f"Status: {status_label}. I’ll update you as soon as we have the green light."
+                "Great, I've marked the event as a provisional Option and passed it to our manager for a quick review. "
+                f"Status: {status_label}. I'll update you as soon as we have the green light."
             )
             note = "confirm: pending-hil"
             return {"message": message, "note": note}
@@ -808,7 +808,7 @@ class HandlePostOfferRoute(OpenEventAction):
         time_label = f"{event_data.get('Start Time') or 'start'}–{event_data.get('End Time') or 'end'}"
         room_label = event_data.get("Preferred Room") or "the room we discussed"
         message = (
-            "Great news — everything is confirmed!"
+            "Great news: everything is confirmed!"
             f"\nDate: {date_label} | Time: {time_label} | Room: {room_label}."
             f"\nStatus: {status_label}. If anything changes, just let me know."
         )
@@ -876,7 +876,7 @@ class HandlePostOfferRoute(OpenEventAction):
         visit_slots = extracted.get("proposed_visit_datetimes") or []
         if visit_slots:
             availability_line = (
-                "Thanks for the suggested times — I'll check availability and circle back shortly."
+                "Thanks for the suggested times. I'll check availability and circle back shortly."
             )
         else:
             availability_line = "I'll pull a few visit times that fit our schedule and get back to you."
@@ -904,7 +904,7 @@ class HandlePostOfferRoute(OpenEventAction):
         question_text = classification.get("extracted_fields", {}).get("user_question_text") or "your question"
         status_label = _current_status_label(event_data)
         message = (
-            f"Thanks for the note — I’ll dig into “{question_text}” and circle back shortly. "
+            f"Thanks for the note. I'll dig into "{question_text}" and circle back shortly. "
             f"Status remains {status_label} while I gather the info."
         )
         note = "question: acknowledgement"
@@ -1252,7 +1252,7 @@ class HandleSiteVisitRoute(OpenEventAction):
             task["notes"] = "visit: noop"
             _append_assistant_history(
                 client,
-                "Thanks for the update — just let me know when you'd like to lock a visit slot.",
+                "Thanks for the update. Just let me know when you'd like to lock a visit slot.",
                 "visit: noop",
             )
             return {

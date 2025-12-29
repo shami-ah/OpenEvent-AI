@@ -2,6 +2,36 @@
 
 ## 2025-12-29
 
+### UX Improvements: LLM Output Hygiene (Session 6.1)
+
+**Summary:** Removed AI-looking patterns from client-facing messages to make output feel more natural.
+
+**Changes:**
+
+1. **Removed em-dashes (—)**
+   - Replaced with periods, commas, or regular dashes across all client-facing messages
+   - Files updated: 15+ files in workflows/, ux/, common/
+   - Em-dash is a telltale sign of AI-generated text
+
+2. **Enhanced paragraph structure**
+   - Updated universal verbalizer system prompt with explicit paragraph guidelines
+   - Messages now have clear structure: opening → content → call-to-action
+   - Short paragraphs (2-3 sentences max) with blank lines between topics
+
+3. **Improved catering flow**
+   - Elegant optional mention in room availability if client didn't request catering
+   - Shows popular options: "Classic Apéro (CHF 18/person)" and "Coffee & Tea (CHF 7.50/person)"
+   - Directs to info page for full menu
+
+**Files Modified:**
+- `backend/ux/universal_verbalizer.py` - Enhanced style guidelines
+- `backend/workflows/planner/*.py` - Em-dash removal
+- `backend/workflows/common/*.py` - Em-dash removal
+- `backend/workflows/steps/step*/*.py` - Em-dash removal in client messages
+- `backend/workflows/steps/step3_room_availability/trigger/step3_handler.py` - Catering teaser
+
+---
+
 ### Billing Address Persistence Fix (Session 6)
 
 **Summary:** Fixed critical bug where billing address was lost before being saved to database.

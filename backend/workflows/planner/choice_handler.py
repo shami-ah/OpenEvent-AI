@@ -356,7 +356,7 @@ def complete_choice_selection(
     planner.event["choice_context"] = None
     planner.state.extras["persist"] = True
 
-    confirmation = f"Got it — I'll add {label}."
+    confirmation = f"Got it, I'll add {label}."
     state_delta = {
         "choice_context": {
             "kind": class_name,

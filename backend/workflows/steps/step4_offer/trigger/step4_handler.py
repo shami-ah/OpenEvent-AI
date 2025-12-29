@@ -336,6 +336,8 @@ def process(state: WorkflowState) -> GroupResult:
             append_audit_entry(event_entry, 4, decision.next_step, f"{change_type.value}_change_detected")
 
             # Skip Q&A: return detour signal
+            # CRITICAL: Update event_entry BEFORE state.current_step so routing loop sees the change
+            update_event_metadata(event_entry, current_step=decision.next_step)
             state.current_step = decision.next_step
             state.set_thread_state("In Progress")
             state.extras["persist"] = True
@@ -949,7 +951,7 @@ def _compose_offer_summary(event_entry: Dict[str, Any], total_amount: float, sta
     manager_requested = bool((event_entry.get("flags") or {}).get("manager_requested"))
     if manager_requested:
         lines = [
-            f"Great — {intro_room} on {intro_date} is ready for manager review.",
+            f"Great, {intro_room} on {intro_date} is ready for manager review.",
             f"Offer draft for {chosen_date} · {room}",
         ]
     else:
@@ -1283,7 +1285,7 @@ def _auto_confirm_without_hil(
     billing_display = format_billing_display(event_entry.get("billing_details") or {}, (event_entry.get("event_data") or {}).get("Billing Address"))
 
     body_lines = [
-        f"Confirmed — {room_label} on {display_date} is locked in.",
+        f"Confirmed: {room_label} on {display_date} is locked in.",
     ]
     if billing_display:
         body_lines.append(f"Billing address: {billing_display}.")

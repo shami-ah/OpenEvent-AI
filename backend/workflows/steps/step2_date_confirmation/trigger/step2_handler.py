@@ -1052,7 +1052,7 @@ def _present_candidate_dates(
         message_lines.append("Would any of these work instead?")
     if weekday_shortfall and formatted_dates:
         message_lines.append(
-            "I couldn't find a free Thursday or Friday in that range—these are the closest available slots right now."
+            "I couldn't find a free Thursday or Friday in that range. These are the closest available slots right now."
         )
 
     if future_suggestion:
@@ -1889,7 +1889,7 @@ def _apply_step2_hil_decision(state: WorkflowState, event_entry: dict, decision:
         event_entry.pop("pending_future_confirmation", None)
         _clear_step2_hil_tasks(state, event_entry)
         draft_message = {
-            "body": "Manual review declined — please advise which alternative dates to offer next.",
+            "body": "Manual review declined. Please advise which alternative dates to offer next.",
             "step": 2,
             "topic": "date_hil_reject",
             "requires_approval": True,
