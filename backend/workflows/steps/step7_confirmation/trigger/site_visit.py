@@ -1,6 +1,12 @@
 """Site visit handling for Step 7 confirmation.
 
 Extracted from step7_handler.py as part of F2 refactoring (Dec 2025).
+
+NOTE: This module is now a thin wrapper around the centralized site visit handler
+at backend/workflows/common/site_visit_handler.py. The centralized handler supports
+site visits from ANY workflow step (2-7), while this module maintains backward
+compatibility for Step 7 specific flows.
+
 Contains 9 functions for the complete site-visit subflow:
 - _handle_site_visit: Main entry point
 - _site_visit_unavailable_response: Fallback when not allowed
@@ -20,6 +26,10 @@ from typing import Any, Dict, List, Optional
 
 from backend.workflows.common.prompts import append_footer
 from backend.workflows.common.room_rules import site_visit_allowed
+from backend.workflows.common.site_visit_state import (
+    get_site_visit_state,
+    set_site_visit_date,
+)
 from backend.workflows.common.types import GroupResult, WorkflowState
 from backend.workflows.io.database import append_audit_entry, update_event_metadata
 
@@ -27,16 +37,19 @@ from .helpers import base_payload
 
 
 def handle_site_visit(state: WorkflowState, event_entry: Dict[str, Any]) -> GroupResult:
-    """Handle site visit request from client."""
+    """Handle site visit request from client.
+
+    This is the Step 7 specific entry point. For cross-step site visit handling,
+    see backend/workflows/common/site_visit_handler.py
+    """
     if not site_visit_allowed(event_entry):
         conf_state = event_entry.setdefault("confirmation_state", {"pending": None, "last_response_type": None})
         conf_state["pending"] = None
         return site_visit_unavailable_response(state, event_entry)
 
     slots = generate_visit_slots(event_entry)
-    visit_state = event_entry.setdefault(
-        "site_visit_state", {"status": "idle", "proposed_slots": [], "scheduled_slot": None}
-    )
+    # Use shared state helpers for consistency
+    visit_state = get_site_visit_state(event_entry)
     visit_state["status"] = "proposed"
     visit_state["proposed_slots"] = slots
     draft_lines = ["We'd be happy to arrange a site visit. Here are some possible times:"]
@@ -298,7 +311,7 @@ def parse_slot_selection(message_text: str, slots: List[str]) -> Optional[str]:
 
 def handle_site_visit_confirmation(state: WorkflowState, event_entry: Dict[str, Any]) -> GroupResult:
     """Confirm the selected site visit slot (direct confirm, no HIL)."""
-    visit_state = event_entry.get("site_visit_state") or {}
+    visit_state = get_site_visit_state(event_entry)
     slots = visit_state.get("proposed_slots", [])
     message_text = (state.message.body or "").strip()
 
@@ -316,11 +329,9 @@ def handle_site_visit_confirmation(state: WorkflowState, event_entry: Dict[str, 
             confirmed_date = None
             confirmed_time = None
 
-        # Update state (Supabase-compatible)
-        visit_state["status"] = "scheduled"
-        visit_state["confirmed_date"] = confirmed_date
-        visit_state["confirmed_time"] = confirmed_time
-        event_entry["site_visit_state"] = visit_state
+        # Use shared state setter for consistency
+        if confirmed_date:
+            set_site_visit_date(event_entry, confirmed_date, confirmed_time)
 
         room_name = event_entry.get("locked_room_id") or "the venue"
         draft = {
