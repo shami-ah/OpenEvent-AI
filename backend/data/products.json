@@ -92,6 +92,20 @@
       ]
     },
     {
+      "id": "equipment-projector",
+      "name": "Projector",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 75.0,
+      "unavailable_in": [],
+      "synonyms": [
+        "beamer",
+        "projection",
+        "projection screen",
+        "video projector"
+      ]
+    },
+    {
       "id": "beverage-cocktail-bar",
       "name": "Cocktail Bar Setup",
       "category": "Beverages",

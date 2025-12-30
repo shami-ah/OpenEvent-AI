@@ -240,3 +240,114 @@ def check_availability(
         )
 
     return {"available": available, "missing": missing}
+
+
+# =============================================================================
+# Category-based semantic matching
+# =============================================================================
+
+@lru_cache(maxsize=1)
+def _build_category_keywords() -> Dict[str, set]:
+    """
+    Build a mapping of category -> set of keywords (names + synonyms).
+    Loaded once and cached for performance.
+    """
+    catalog = _load_catalog()
+    category_keywords: Dict[str, set] = {}
+
+    for record in catalog.values():
+        category = (record.category or "").strip()
+        if not category:
+            continue
+
+        if category not in category_keywords:
+            category_keywords[category] = set()
+
+        # Add product name (lowercase, split into words)
+        name_lower = record.name.lower()
+        category_keywords[category].add(name_lower)
+        for word in name_lower.split():
+            if len(word) > 2:  # Skip very short words
+                category_keywords[category].add(word)
+
+        # Add all synonyms
+        for synonym in record.synonyms:
+            category_keywords[category].add(synonym.lower())
+            for word in synonym.lower().split():
+                if len(word) > 2:
+                    category_keywords[category].add(word)
+
+    return category_keywords
+
+
+def get_categories() -> List[str]:
+    """Get all unique product categories from the catalog."""
+    return list(_build_category_keywords().keys())
+
+
+def text_matches_category(text: str, category: str) -> bool:
+    """
+    Check if the given text semantically matches the specified category.
+    Uses product names and synonyms from the catalog for matching.
+
+    Args:
+        text: User text to check (will be lowercased)
+        category: Category name (e.g., "Catering", "Equipment")
+
+    Returns:
+        True if any category keyword is found in the text
+    """
+    if not text or not category:
+        return False
+
+    keywords = _build_category_keywords().get(category, set())
+    if not keywords:
+        return False
+
+    text_lower = text.lower()
+    return any(kw in text_lower for kw in keywords)
+
+
+def detect_mentioned_categories(text: str) -> List[str]:
+    """
+    Detect which product categories are mentioned in the text.
+
+    Args:
+        text: User text to analyze
+
+    Returns:
+        List of category names that have matches in the text
+    """
+    if not text:
+        return []
+
+    mentioned = []
+    for category in get_categories():
+        if text_matches_category(text, category):
+            mentioned.append(category)
+    return mentioned
+
+
+def has_specific_product_request(text: str, exclude_categories: Optional[List[str]] = None) -> bool:
+    """
+    Check if user mentioned specific products from categories OTHER than the excluded ones.
+
+    Useful for checking if user asked for equipment/add-ons without mentioning catering.
+
+    Args:
+        text: User text to analyze
+        exclude_categories: Categories to ignore (e.g., ["Catering", "Beverages"])
+
+    Returns:
+        True if user mentioned products from non-excluded categories
+    """
+    if not text:
+        return False
+
+    exclude = set(c.lower() for c in (exclude_categories or []))
+    mentioned = detect_mentioned_categories(text)
+
+    for cat in mentioned:
+        if cat.lower() not in exclude:
+            return True
+    return False

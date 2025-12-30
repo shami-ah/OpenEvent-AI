@@ -703,51 +703,115 @@ def process(state: WorkflowState) -> GroupResult:
 
     # Build ONLY conversational intro for chat message
     # Structured room data is in table_blocks (rendered separately in UI)
+    # Keep it concise - structured data is in the link, not repeated here
     intro_lines: List[str] = []
+    num_rooms = len(verbalizer_rooms) if verbalizer_rooms else 0
+    room_word = "room" if num_rooms == 1 else "rooms"
+
+    # Get room capacity for selected room from verbalizer payload
+    selected_room_capacity = None
+    if selected_room and verbalizer_rooms:
+        for vr in verbalizer_rooms:
+            if vr.get("name") == selected_room:
+                selected_room_capacity = vr.get("capacity")
+                break
+
+    # Get client's wish products for acknowledgment
+    client_prefs = event_entry.get("preferences") or {}
+    wish_products_list = client_prefs.get("wish_products") or []
+
     if user_requested_room and user_requested_room != selected_room:
         intro_lines.append(
-            f"Sorry, {user_requested_room} isn't available on {display_chosen_date or 'your date'}. "
-            f"I've found some great alternatives that fit your {participants or 'guest'} count and requirements."
+            f"{user_requested_room} isn't available on {display_chosen_date or 'your date'}. "
+            f"I've found {num_rooms} alternative {room_word} that work."
         )
+        intro_lines.append(f"Let me know which {room_word} you'd like and I'll prepare the offer.")
     elif selected_room and outcome in {ROOM_OUTCOME_AVAILABLE, ROOM_OUTCOME_OPTION}:
-        descriptor = "available" if outcome == ROOM_OUTCOME_AVAILABLE else "on option"
-        intro_lines.append(
-            f"Great news! {selected_room} is {descriptor} on {display_chosen_date or 'your requested date'} "
-            f"and is a perfect fit for your {participants or ''} guests."
-        )
-        intro_lines.append("I've put together the room options for you to review.")
+        # Build recommendation with gatekeeping variables (date, capacity, equipment)
+        # Echo back client requirements ("sandwich check")
+        reason_parts = []
+        if selected_room_capacity:
+            reason_parts.append(f"accommodates up to {selected_room_capacity} guests")
+        if wish_products_list:
+            products_str = ", ".join(str(p).lower() for p in wish_products_list[:3])
+            reason_parts.append(f"includes your {products_str}")
+
+        if reason_parts:
+            reason_clause = " and ".join(reason_parts)
+            intro_lines.append(
+                f"For your event on {display_chosen_date or 'your date'} with {participants} guests, "
+                f"I recommend {selected_room} because it {reason_clause}."
+            )
+        else:
+            intro_lines.append(
+                f"For your event on {display_chosen_date or 'your date'} with {participants} guests, "
+                f"I recommend {selected_room}."
+            )
+
+        if num_rooms > 1:
+            intro_lines.append(f"Would you like {selected_room}, or see other options?")
+        else:
+            intro_lines.append(f"Would you like me to prepare an offer for {selected_room}?")
     else:
         intro_lines.append(
-            f"Unfortunately, the rooms aren't available on {display_chosen_date or 'your requested date'} as-is."
+            f"The requested date isn't available. Here are {num_rooms} alternative {room_word}."
         )
-        intro_lines.append("I'm showing some alternatives with nearby dates that might work.")
-
-    intro_lines.append("Just let me know which room you'd like and I'll prepare the offer.")
+        intro_lines.append(f"Let me know which {room_word} you'd like and I'll prepare the offer.")
 
     # -------------------------------------------------------------------------
-    # CATERING TEASER: Add brief catering mention if client hasn't asked for it
-    # This integrates catering awareness into the room availability flow
-    # without requiring a separate exchange.
+    # CATERING TEASER: Only suggest if:
+    # 1. Client hasn't mentioned catering/food, AND
+    # 2. Client hasn't mentioned specific equipment (projector, sound, etc.)
+    # If they mentioned equipment, they'll ask about catering if they want it.
+    # Uses dynamic matching from product catalog (products.json) with synonyms.
     # -------------------------------------------------------------------------
+    from backend.services.products import text_matches_category
+
     client_prefs = event_entry.get("preferences") or {}
     wish_products = client_prefs.get("wish_products") or []
-    has_catering_request = any(
-        "cater" in str(p).lower() or "food" in str(p).lower() or "lunch" in str(p).lower()
-        or "dinner" in str(p).lower() or "apero" in str(p).lower() or "coffee" in str(p).lower()
-        for p in wish_products
+    # Also check requirements for product keywords
+    special_reqs = (event_entry.get("requirements") or {}).get("special_requirements", "") or ""
+    # Include original message text - may contain product mentions not yet extracted
+    all_text = " ".join([str(p) for p in wish_products] + [special_reqs, message_text or ""])
+
+    # Dynamic matching using product catalog categories and synonyms
+    has_catering_request = (
+        text_matches_category(all_text, "Catering") or
+        text_matches_category(all_text, "Beverages")
     )
-    if not has_catering_request:
-        # Elegant catering teaser with popular options
-        # Popular packages: Classic Apéro (CHF 18), Premium Apéro (CHF 28), Coffee Bar (CHF 7.50)
-        intro_lines.append("")  # Add paragraph break
+    # Check if client mentioned equipment/add-ons - if so, don't push catering
+    has_equipment_request = (
+        text_matches_category(all_text, "Equipment") or
+        text_matches_category(all_text, "Add-ons") or
+        text_matches_category(all_text, "Entertainment")
+    )
+
+    # Products for verbalizer fact verification (catering teaser prices)
+    verbalizer_products: List[Dict[str, Any]] = []
+    # Only add catering teaser if client mentioned neither catering nor equipment
+    if not has_catering_request and not has_equipment_request:
+        intro_lines.append("")  # Paragraph break
         intro_lines.append(
             "Would you like to add catering? Our Classic Apéro (CHF 18/person) and "
-            "Coffee & Tea service (CHF 7.50/person) are popular choices. "
-            "See the full menu in the info page."
+            "Coffee & Tea service (CHF 7.50/person) are popular choices."
         )
+        # Pass catering products to verbalizer so it knows these amounts are valid
+        verbalizer_products = [
+            {"name": "Classic Apéro", "unit_price": 18.0, "unit": "per_person"},
+            {"name": "Coffee & Tea service", "unit_price": 7.50, "unit": "per_person"},
+        ]
 
     # body_markdown = ONLY conversational prose (structured data is in table_blocks)
-    body_markdown = " ".join(intro_lines)
+    # Use double newline for paragraph breaks (empty strings in list)
+    body_parts = []
+    for line in intro_lines:
+        if line == "":
+            body_parts.append("\n\n")
+        else:
+            if body_parts and body_parts[-1] != "\n\n":
+                body_parts.append(" ")
+            body_parts.append(line)
+    body_markdown = "".join(body_parts).strip()
 
     # Create snapshot with full room data for persistent link
     # Include client preferences so info page can show feature matching
@@ -800,16 +864,20 @@ def process(state: WorkflowState) -> GroupResult:
         body_markdown = "\n".join([shortcut_note, "", body_markdown])
 
     # Universal Verbalizer: transform to warm, human-like message
+    # Only the recommended room (room_name) is a required fact.
+    # Other rooms are mentioned in the fallback text for LLM context but not required.
     from backend.workflows.common.prompts import verbalize_draft_body
+
     body_markdown = verbalize_draft_body(
         body_markdown,
         step=3,
         topic=outcome_topic,
         event_date=display_chosen_date,
         participants_count=participants,
-        rooms=verbalizer_rooms,
-        room_name=selected_room,
+        rooms=[],  # Don't require other rooms - only room_name is required
+        room_name=selected_room,  # The recommended room (required fact)
         room_status=outcome,
+        products=verbalizer_products,  # Pass catering products for fact verification
     )
 
     # Capture menu options separately (NOT in body_markdown - shown in info cards)

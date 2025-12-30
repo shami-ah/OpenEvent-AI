@@ -172,6 +172,8 @@ HARD RULES (NEVER BREAK):
 6. NEVER change units: "per event" stays "per event", "per person" stays "per person"
 7. NEVER invent dates, prices, room names, or units not in the facts
 8. NEVER change any numbers or swap unit types
+9. PRESERVE ALL HTML links EXACTLY as provided - if you see <a href="...">text</a>, keep it exactly as-is. Format link as markdown [text](url) if the original is a raw URL
+10. ONLY suggest products/catering the client mentioned or that are truly essential for their request. DO NOT proactively push catering if they only asked for equipment (projector, sound, etc.)
 
 TRANSFORMATION EXAMPLES:
 
