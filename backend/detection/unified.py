@@ -76,6 +76,10 @@ class UnifiedDetectionResult:
     products: List[str] = field(default_factory=list)
     billing_address: Optional[Dict[str, str]] = None
 
+    # Site visit specific
+    site_visit_room: Optional[str] = None  # Room mentioned for site visit
+    site_visit_date: Optional[str] = None  # Date mentioned for site visit
+
     # Q&A routing hints
     qna_types: List[str] = field(default_factory=list)
     step_anchor: Optional[str] = None
@@ -106,6 +110,8 @@ class UnifiedDetectionResult:
                 "room_preference": self.room_preference,
                 "products": self.products,
                 "billing_address": self.billing_address,
+                "site_visit_room": self.site_visit_room,
+                "site_visit_date": self.site_visit_date,
             },
             "qna_types": self.qna_types,
             "step_anchor": self.step_anchor,
@@ -166,9 +172,11 @@ Return a JSON object with this exact structure:
     "duration_hours": float or null,
     "room_preference": room name or null,
     "products": ["catering", "projector", ...] or [],
-    "billing_address": {{"company": "", "street": "", "postal_code": "", "city": "", "country": ""}} or null
+    "billing_address": {{"company": "", "street": "", "postal_code": "", "city": "", "country": ""}} or null,
+    "site_visit_room": room mentioned for site visit or null (if different from main event room),
+    "site_visit_date": date mentioned for site visit or null (YYYY-MM-DD format)
   }},
-  "qna_types": list of applicable types from ["free_dates", "room_features", "catering_for", "products_for", "site_visit", "parking", "check_availability", "check_capacity"],
+  "qna_types": list of applicable types from ["free_dates", "room_features", "catering_for", "products_for", "site_visit_overview", "site_visit_request", "parking", "check_availability", "check_capacity"],
   "step_anchor": suggested workflow step or null
 }}
 
@@ -205,7 +213,8 @@ def run_unified_detection(
     Returns:
         UnifiedDetectionResult with all extracted information
     """
-    from backend.adapters.agent_adapter import get_agent_adapter
+    from backend.adapters.agent_adapter import get_adapter_for_provider
+    from backend.llm.provider_config import get_intent_provider
 
     # Build the prompt
     prompt = UNIFIED_DETECTION_PROMPT.format(
@@ -216,8 +225,9 @@ def run_unified_detection(
         last_topic=last_topic or "unknown",
     )
 
-    # Get agent adapter (uses configured provider - Gemini by default)
-    adapter = get_agent_adapter()
+    # Get adapter for intent detection (respects hybrid mode config)
+    intent_provider = get_intent_provider()
+    adapter = get_adapter_for_provider(intent_provider)
 
     try:
         # Make the LLM call
@@ -241,6 +251,19 @@ def run_unified_detection(
         signals = data.get("signals", {})
         entities = data.get("entities", {})
 
+        # Merge qna_types from LLM with keyword-based detection
+        # This ensures site_visit_request and other types are detected even if LLM misses them
+        from backend.detection.intent.classifier import _detect_qna_types
+
+        llm_qna_types = data.get("qna_types", [])
+        keyword_qna_types = _detect_qna_types(message.lower())
+
+        # Merge both lists, removing duplicates while preserving order
+        merged_qna_types = list(llm_qna_types)
+        for qna_type in keyword_qna_types:
+            if qna_type not in merged_qna_types:
+                merged_qna_types.append(qna_type)
+
         result = UnifiedDetectionResult(
             language=data.get("language", "en"),
             intent=data.get("intent", "general_qna"),
@@ -259,7 +282,9 @@ def run_unified_detection(
             room_preference=entities.get("room_preference"),
             products=entities.get("products", []),
             billing_address=entities.get("billing_address"),
-            qna_types=data.get("qna_types", []),
+            site_visit_room=entities.get("site_visit_room"),
+            site_visit_date=entities.get("site_visit_date"),
+            qna_types=merged_qna_types,
             step_anchor=data.get("step_anchor"),
             raw_response=data,
         )
@@ -267,14 +292,97 @@ def run_unified_detection(
         return result
 
     except json.JSONDecodeError as e:
-        print(f"[UNIFIED_DETECTION] JSON parse error: {e}")
-        # Return minimal result on parse failure
+        print(f"[UNIFIED_DETECTION] JSON parse error with {intent_provider}: {e}")
+        # Try fallback providers on JSON parse failure
+        from backend.llm.provider_config import get_fallback_providers
+        for fallback in get_fallback_providers(intent_provider):
+            try:
+                print(f"[UNIFIED_DETECTION] Trying fallback provider: {fallback}")
+                fallback_adapter = get_adapter_for_provider(fallback)
+                response_text = fallback_adapter.complete(
+                    prompt=prompt,
+                    system_prompt="You are a precise JSON extraction assistant. Return only valid JSON.",
+                    temperature=0.1,
+                    max_tokens=1000,
+                )
+                json_text = response_text.strip()
+                if json_text.startswith("```"):
+                    json_text = re.sub(r"```(?:json)?\n?", "", json_text)
+                    json_text = json_text.rstrip("`").strip()
+                data = json.loads(json_text)
+                # Success with fallback - return result
+                signals = data.get("signals", {})
+                entities = data.get("entities", {})
+                return UnifiedDetectionResult(
+                    language=data.get("language", "en"),
+                    intent=data.get("intent", "general_qna"),
+                    intent_confidence=data.get("intent_confidence", 0.5),
+                    is_confirmation=signals.get("is_confirmation", False),
+                    is_acceptance=signals.get("is_acceptance", False),
+                    is_rejection=signals.get("is_rejection", False),
+                    is_change_request=signals.get("is_change_request", False),
+                    is_manager_request=signals.get("is_manager_request", False),
+                    is_question=signals.get("is_question", False),
+                    has_urgency=signals.get("has_urgency", False),
+                    date=entities.get("date"),
+                    date_text=entities.get("date_text"),
+                    participants=entities.get("participants"),
+                    duration_hours=entities.get("duration_hours"),
+                    room_preference=entities.get("room_preference"),
+                    products=entities.get("products", []),
+                    billing_address=entities.get("billing_address"),
+                    site_visit_room=entities.get("site_visit_room"),
+                    site_visit_date=entities.get("site_visit_date"),
+                    qna_types=data.get("qna_types", []),
+                    step_anchor=data.get("step_anchor"),
+                    raw_response=data,
+                )
+            except Exception as fallback_err:
+                print(f"[UNIFIED_DETECTION] Fallback {fallback} also failed: {fallback_err}")
+                continue
+        # All providers failed - return minimal result
         return UnifiedDetectionResult(
             intent="general_qna",
             intent_confidence=0.3,
         )
     except Exception as e:
-        print(f"[UNIFIED_DETECTION] Error: {e}")
+        print(f"[UNIFIED_DETECTION] Error with {intent_provider}: {e}")
+        # Try fallback on any error
+        from backend.llm.provider_config import get_fallback_providers
+        for fallback in get_fallback_providers(intent_provider):
+            try:
+                print(f"[UNIFIED_DETECTION] Trying fallback provider: {fallback}")
+                fallback_adapter = get_adapter_for_provider(fallback)
+                response_text = fallback_adapter.complete(
+                    prompt=prompt,
+                    system_prompt="You are a precise JSON extraction assistant. Return only valid JSON.",
+                    temperature=0.1,
+                    max_tokens=1000,
+                )
+                data = json.loads(response_text.strip())
+                signals = data.get("signals", {})
+                entities = data.get("entities", {})
+                return UnifiedDetectionResult(
+                    language=data.get("language", "en"),
+                    intent=data.get("intent", "general_qna"),
+                    intent_confidence=data.get("intent_confidence", 0.5),
+                    is_confirmation=signals.get("is_confirmation", False),
+                    is_acceptance=signals.get("is_acceptance", False),
+                    is_rejection=signals.get("is_rejection", False),
+                    is_change_request=signals.get("is_change_request", False),
+                    is_manager_request=signals.get("is_manager_request", False),
+                    is_question=signals.get("is_question", False),
+                    has_urgency=signals.get("has_urgency", False),
+                    date=entities.get("date"),
+                    date_text=entities.get("date_text"),
+                    participants=entities.get("participants"),
+                    room_preference=entities.get("room_preference"),
+                    products=entities.get("products", []),
+                    qna_types=data.get("qna_types", []),
+                    raw_response=data,
+                )
+            except Exception:
+                continue
         return UnifiedDetectionResult(
             intent="general_qna",
             intent_confidence=0.3,
@@ -407,6 +515,19 @@ def _run_legacy_detection(
     # Run intent classification
     intent_result = classify_intent(message, current_step=current_step)
 
+    # Merge qna_types from LLM with keyword-based detection
+    # This ensures site_visit_request and other types are detected even if LLM misses them
+    from backend.detection.intent.classifier import _detect_qna_types
+
+    llm_qna_types = intent_result.get("secondary", [])
+    keyword_qna_types = _detect_qna_types(message.lower())
+
+    # Merge both lists, removing duplicates while preserving order
+    merged_qna_types = list(llm_qna_types)
+    for qna_type in keyword_qna_types:
+        if qna_type not in merged_qna_types:
+            merged_qna_types.append(qna_type)
+
     # Map to UnifiedDetectionResult
     return UnifiedDetectionResult(
         language=pre_filter_result.language,
@@ -419,7 +540,7 @@ def _run_legacy_detection(
         is_manager_request=pre_filter_result.has_manager_signal,
         is_question=pre_filter_result.has_question_signal,
         has_urgency=pre_filter_result.has_urgency_signal,
-        qna_types=intent_result.get("secondary", []),
+        qna_types=merged_qna_types,
         step_anchor=intent_result.get("step_anchor"),
     )
 

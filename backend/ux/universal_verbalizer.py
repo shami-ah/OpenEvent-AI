@@ -669,28 +669,25 @@ def _format_facts_for_prompt(context: MessageContext) -> str:
 
 
 def _call_llm(payload: Dict[str, Any]) -> str:
-    """Call the LLM for verbalization."""
-    deterministic = os.getenv("OPENAI_TEST_MODE") == "1"
-    temperature = 0.0 if deterministic else 0.3  # Slightly higher for more natural variation
+    """Call the LLM for verbalization using configured provider."""
+    from backend.adapters.agent_adapter import get_adapter_for_provider
+    from backend.llm.provider_config import get_verbalization_provider
 
-    try:
-        from openai import OpenAI
-    except Exception as exc:
-        raise RuntimeError(f"OpenAI SDK unavailable: {exc}") from exc
+    # Get the verbalization provider from config (hybrid mode support)
+    provider = get_verbalization_provider()
+    adapter = get_adapter_for_provider(provider)
 
-    from backend.utils.openai_key import load_openai_api_key
-    api_key = load_openai_api_key()
-    client = OpenAI(api_key=api_key)
+    # Build prompt from payload
+    prompt = payload["user"]
 
-    response = client.responses.create(
-        model=os.getenv("OPENAI_VERBALIZER_MODEL", "gpt-4o-mini"),
-        input=[
-            {"role": "system", "content": payload["system"]},
-            {"role": "user", "content": payload["user"]},
-        ],
-        temperature=temperature,
+    # Call the adapter's complete method
+    # Note: json_mode=False because verbalization outputs prose, not JSON
+    return adapter.complete(
+        prompt=prompt,
+        system_prompt=payload["system"],
+        temperature=0.3,  # Slightly higher for natural variation
+        json_mode=False,  # Verbalization outputs prose, not JSON
     )
-    return getattr(response, "output_text", "").strip()
 
 
 def _verify_facts(

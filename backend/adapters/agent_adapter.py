@@ -422,6 +422,10 @@ class OpenAIAgentAdapter(AgentAdapter):
             raise RuntimeError("openai package is required when AGENT_MODE=openai")
         api_key = load_openai_api_key()
         self._client = OpenAI(api_key=api_key)
+        # TODO: Consider changing default from o3-mini to gpt-4o-mini
+        # o3-mini is a reasoning model that sometimes returns malformed JSON
+        # gpt-4o-mini is 7x cheaper and more reliable for JSON extraction
+        # Need to verify gpt-4o-mini reliability before switching default
         model = os.getenv("OPENAI_AGENT_MODEL", "o3-mini")
         self._intent_model = os.getenv("OPENAI_INTENT_MODEL", model)
         self._entity_model = os.getenv("OPENAI_ENTITY_MODEL", model)
@@ -705,6 +709,40 @@ class GeminiAgentAdapter(AgentAdapter):
 
 
 _AGENT_SINGLETON: Optional[AgentAdapter] = None
+
+# Per-provider singletons for hybrid mode
+_PROVIDER_ADAPTERS: Dict[str, AgentAdapter] = {}
+
+
+def get_adapter_for_provider(provider: str) -> AgentAdapter:
+    """
+    Get an adapter for a specific provider (hybrid mode support).
+
+    This allows using different providers for different tasks:
+    - Gemini for intent/entity extraction (cheaper)
+    - OpenAI for verbalization (better quality)
+
+    Args:
+        provider: One of "openai", "gemini", "stub"
+
+    Returns:
+        AgentAdapter for the specified provider
+    """
+    provider = provider.lower()
+
+    if provider in _PROVIDER_ADAPTERS:
+        return _PROVIDER_ADAPTERS[provider]
+
+    if provider == "stub":
+        _PROVIDER_ADAPTERS[provider] = StubAgentAdapter()
+    elif provider == "openai":
+        _PROVIDER_ADAPTERS[provider] = OpenAIAgentAdapter()
+    elif provider == "gemini":
+        _PROVIDER_ADAPTERS[provider] = GeminiAgentAdapter()
+    else:
+        raise RuntimeError(f"Unsupported provider: {provider}")
+
+    return _PROVIDER_ADAPTERS[provider]
 
 
 def get_agent_adapter() -> AgentAdapter:

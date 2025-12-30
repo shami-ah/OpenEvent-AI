@@ -415,9 +415,11 @@ async def set_llm_provider_config(config: LLMProviderConfig):
         os.environ["ENTITY_PROVIDER"] = config.entity_provider.lower()
         os.environ["VERBALIZER_PROVIDER"] = config.verbalization_provider.lower()
 
-        # Reset the agent adapter singleton to pick up new settings
+        # Reset caches to pick up new settings
         from backend.adapters.agent_adapter import reset_agent_adapter
+        from backend.llm.provider_config import clear_provider_cache
         reset_agent_adapter()
+        clear_provider_cache()
 
         print(f"[Config] LLM providers updated: intent={config.intent_provider} entity={config.entity_provider} verbalization={config.verbalization_provider}")
 
