@@ -1465,6 +1465,21 @@ def _resolve_confirmation_window(state: WorkflowState, event_entry: dict) -> Opt
             end_obj = None
             end_time = None
 
+    # [FIX] Infer 4-hour default duration when only start time is provided
+    # This prevents the loop of repeatedly asking for time when user provides single time
+    if start_obj and not end_obj:
+        # Check if we're already in a pending_time_request loop for this date
+        pending = event_entry.get("pending_time_request") or {}
+        if pending.get("iso_date") == iso_date:
+            # Already asked for time once - infer 4-hour default duration
+            from datetime import timedelta
+            default_duration_hours = 4
+            start_dt = datetime.combine(datetime.today(), start_obj)
+            end_dt = start_dt + timedelta(hours=default_duration_hours)
+            end_obj = end_dt.time()
+            end_time = f"{end_obj.hour:02d}:{end_obj.minute:02d}"
+            print(f"[Step2][TIME_INFER] Single time {start_time} detected, inferring end_time={end_time} (4-hour default)")
+
     if start_time:
         user_info["start_time"] = start_time
     elif "start_time" in user_info:
@@ -1499,11 +1514,42 @@ def _handle_partial_confirmation(
 ) -> GroupResult:
     """Persist the date and request a time clarification without stalling the flow."""
 
+    # [FIX] Loop detection: If we've already asked for time on this date, use defaults
+    pending = event_entry.get("pending_time_request") or {}
+    if pending.get("iso_date") == window.iso_date:
+        # Check for loop - if pending was set recently and we're still partial, break the loop
+        time_request_count = pending.get("_request_count", 0) + 1
+        if time_request_count >= 2:
+            # Already asked twice - use default time window
+            print(f"[Step2][LOOP_BREAK] Time request loop detected for {window.display_date}, using default window")
+            window = ConfirmationWindow(
+                display_date=window.display_date,
+                iso_date=window.iso_date,
+                start_time="14:00",
+                end_time="18:00",
+                start_iso=None,  # Will be computed downstream
+                end_iso=None,
+                inherited_times=False,
+                partial=False,  # No longer partial!
+                source_message_id=window.source_message_id,
+            )
+            # Clean up pending state
+            event_entry.pop("pending_time_request", None)
+            # Return successful confirmation instead of asking again
+            state.user_info["event_date"] = window.display_date
+            state.user_info["date"] = window.iso_date
+            state.user_info["start_time"] = window.start_time
+            state.user_info["end_time"] = window.end_time
+            # Continue with full confirmation flow - return None to let caller proceed
+            return None  # Signal to caller to use non-partial path
+
     _reset_date_attempts(event_entry)
 
     event_entry.setdefault("event_data", {})["Event Date"] = window.display_date
     # D8: Use extracted function
     set_pending_time_state(event_entry, window)
+    # Track request count for loop detection
+    event_entry["pending_time_request"]["_request_count"] = pending.get("_request_count", 0) + 1
 
     state.user_info["event_date"] = window.display_date
     state.user_info["date"] = window.iso_date

@@ -84,8 +84,11 @@ def normalize_phone(value: Any) -> Optional[str]:
 
 
 def sanitize_participants(value: Any) -> Optional[int]:
-    """[Condition] Coerce participant counts into integers when present."""
+    """[Condition] Coerce participant counts into integers when present.
 
+    Uses context-aware extraction to avoid parsing years from dates as capacity.
+    Limits to 3 digits (max 999 guests - venues rarely exceed this).
+    """
     if value is None:
         return None
     if isinstance(value, int):
@@ -93,12 +96,32 @@ def sanitize_participants(value: Any) -> Optional[int]:
     if isinstance(value, float):
         return int(value)
     text = clean_text(value) or ""
-    match = re.search(r"(\d{1,4})", text)
+
+    # First try: number followed by capacity keywords (most reliable)
+    match = re.search(
+        r"\b(\d{1,3})\s*(?:people|persons?|guests?|participants?|pax|attendees?)\b",
+        text,
+        re.IGNORECASE,
+    )
     if match:
         try:
             return int(match.group(1))
         except ValueError:
-            return None
+            pass
+
+    # Second try: standalone 1-3 digit number NOT part of a date pattern
+    # Excludes: DD.MM.YYYY, YYYY-MM-DD, YYYY/MM/DD patterns
+    match = re.search(r"(?<!\d)(?<!\.)(\d{1,3})(?!\d)(?!\.\d{2}\.)", text)
+    if match:
+        num = int(match.group(1))
+        # Sanity check: reject if it looks like a day/month (1-31) in isolation
+        # unless it's clearly a participant count context
+        if num > 31 or "people" in text.lower() or "guest" in text.lower():
+            return num
+        # For small numbers (1-31), only accept if no date-like patterns nearby
+        if not re.search(r"\d{1,2}\.\d{1,2}\.", text):
+            return num
+
     return None
 
 

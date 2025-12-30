@@ -483,6 +483,17 @@ async def start_conversation(request: StartConversationRequest):
             "is_complete": False,
             "event_info": None,
         }
+    # Handle standalone Q&A (questions without existing event)
+    if wf_action == "standalone_qna":
+        draft_messages = wf_res.get("draft_messages", [])
+        response_text = draft_messages[0].get("body", "") if draft_messages else ""
+        return {
+            "session_id": session_id,
+            "workflow_type": "standalone_qna",
+            "response": response_text,
+            "is_complete": False,
+            "event_info": None,
+        }
     # [DEV TEST MODE] Return choice prompt when existing event detected
     # Note: payload fields are merged at top level by GroupResult.merged()
     if wf_action == "dev_choice_required":

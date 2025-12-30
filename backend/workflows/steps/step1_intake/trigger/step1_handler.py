@@ -592,6 +592,46 @@ def process(state: WorkflowState) -> GroupResult:
                     state.confidence = confidence
                     state.intent_detail = "event_intake_billing_capture"
                     user_info["billing_address"] = body_text.strip()
+
+                # Handle standalone Q&A without event - don't route to manual_review
+                # This allows Q&A questions like "do you have parking?" to be answered
+                # even when there's no existing booking context
+                is_qna_intent = intent in (IntentLabel.NON_EVENT, IntentLabel.CAPABILITY_QNA) or "qna" in intent.value.lower()
+                if is_qna_intent and not linked_event:
+                    # Return a helpful response instead of manual_review
+                    qna_response = (
+                        "Thank you for your question! To help you best, could you let me know if "
+                        "you're interested in booking an event with us? If so, please share:\n"
+                        "- Your preferred date\n"
+                        "- Expected number of guests\n\n"
+                        "If you have a general question about our venue or services, "
+                        "feel free to ask and I'll do my best to help."
+                    )
+                    qna_response = append_footer(
+                        qna_response,
+                        step=1,
+                        next_step=1,
+                        thread_state="Awaiting Client",
+                    )
+                    state.add_draft_message(
+                        {
+                            "body": qna_response,
+                            "step": 1,
+                            "topic": "standalone_qna",
+                        }
+                    )
+                    state.set_thread_state("Awaiting Client")
+                    payload = {
+                        "client_id": state.client_id,
+                        "event_id": None,
+                        "intent": intent.value,
+                        "confidence": round(confidence, 3),
+                        "draft_messages": state.draft_messages,
+                        "thread_state": state.thread_state,
+                        "standalone_qna": True,
+                    }
+                    return GroupResult(action="standalone_qna", payload=payload, halt=True)
+
                 if not is_event_request(intent) or confidence < 0.85:
                     trace_marker(
                         thread_id,

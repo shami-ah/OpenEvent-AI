@@ -235,7 +235,7 @@ def run_unified_detection(
             prompt=prompt,
             system_prompt="You are a precise JSON extraction assistant. Return only valid JSON.",
             temperature=0.1,  # Low temperature for consistent extraction
-            max_tokens=1000,
+            max_tokens=2000,
         )
 
         # Parse JSON response
@@ -303,7 +303,7 @@ def run_unified_detection(
                     prompt=prompt,
                     system_prompt="You are a precise JSON extraction assistant. Return only valid JSON.",
                     temperature=0.1,
-                    max_tokens=1000,
+                    max_tokens=2000,
                 )
                 json_text = response_text.strip()
                 if json_text.startswith("```"):
@@ -357,7 +357,7 @@ def run_unified_detection(
                     prompt=prompt,
                     system_prompt="You are a precise JSON extraction assistant. Return only valid JSON.",
                     temperature=0.1,
-                    max_tokens=1000,
+                    max_tokens=2000,
                 )
                 data = json.loads(response_text.strip())
                 signals = data.get("signals", {})
