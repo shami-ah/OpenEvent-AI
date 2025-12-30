@@ -716,6 +716,26 @@ async def send_message(request: SendMessageRequest):
     # Only use fallback message if reply is empty AND HIL approval is NOT pending
     res_meta = wf_res.get("res") or {}
     hil_pending = res_meta.get("pending_hil_approval", False)
+    workflow_action = wf_res.get("action", "")
+
+    # Handle intentionally silent responses (out-of-context, nonsense_ignored)
+    # These actions mean "do not respond" - return empty response, no fallback
+    silent_actions = {"out_of_context_ignored", "nonsense_ignored"}
+    if workflow_action in silent_actions:
+        # Intentionally no response - client sent wrong step action or nonsense
+        conversation_state.event_info = _update_event_info_from_db(
+            conversation_state.event_info,
+            wf_res.get("event_id") or conversation_state.event_id,
+        )
+        return {
+            "session_id": request.session_id,
+            "workflow_type": request.session_id,
+            "response": "",  # Empty response = no reply
+            "is_complete": conversation_state.is_complete,
+            "event_info": conversation_state.event_info.dict(),
+            "pending_actions": None,
+        }
+
     if not assistant_reply and not hil_pending:
         # Create diagnostic fallback context for empty workflow reply
         fallback_ctx = create_fallback_context(
