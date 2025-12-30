@@ -267,21 +267,44 @@ def _format_participants_label(raw: Optional[str]) -> str:
     return text
 
 
-def _trigger_room_availability(event_id: Optional[str], chosen_date: str) -> None:
-    """Trigger room availability workflow after date confirmation."""
+def _trigger_room_availability(event_id: Optional[str], chosen_date: str) -> Optional[str]:
+    """Trigger room availability workflow after date confirmation.
+
+    Returns:
+        Error message if something failed, None if successful.
+    """
+    from backend.utils.fallback import create_fallback_context
+
     if not event_id:
-        print("[WF] Skipping room availability trigger - missing event_id.")
-        return
+        ctx = create_fallback_context(
+            source="api.routes.messages.trigger_availability",
+            trigger="missing_event_id",
+        )
+        print(f"[FALLBACK] {ctx.source} | {ctx.trigger}")
+        return "I couldn't check room availability because the event record is missing."
+
     try:
         db = wf_load_db()
     except Exception as exc:
-        print(f"[WF][ERROR] Failed to load workflow DB: {exc}")
-        return
+        ctx = create_fallback_context(
+            source="api.routes.messages.trigger_availability",
+            trigger="db_load_failed",
+            event_id=event_id,
+            error=exc,
+        )
+        print(f"[FALLBACK] {ctx.source} | {ctx.trigger} | {exc}")
+        return "I couldn't access the booking database. I've escalated this for manual follow-up."
+
     events = db.get("events", [])
     event_entry = next((evt for evt in events if evt.get("event_id") == event_id), None)
     if not event_entry:
-        print(f"[WF][WARN] Event {event_id} not found in DB; cannot trigger availability workflow.")
-        return
+        ctx = create_fallback_context(
+            source="api.routes.messages.trigger_availability",
+            trigger="event_not_found",
+            event_id=event_id,
+        )
+        print(f"[FALLBACK] {ctx.source} | {ctx.trigger} | event_id={event_id}")
+        return "I couldn't find the event record. I've asked a teammate to verify it manually."
 
     event_data = event_entry.setdefault("event_data", {})
     event_data["Status"] = "Date Confirmed"
@@ -299,7 +322,7 @@ def _trigger_room_availability(event_id: Optional[str], chosen_date: str) -> Non
                 if first_day == iso_date:
                     wf_save_db(db)
                     print(f"[WF] Availability already assessed for {iso_date}; skipping rerun.")
-                    return
+                    return None
 
     logs.append(
         {
@@ -314,12 +337,22 @@ def _trigger_room_availability(event_id: Optional[str], chosen_date: str) -> Non
 
     try:
         run_availability_workflow(event_id, get_calendar_adapter(), GUI_ADAPTER)
+        return None  # Success
     except Exception as exc:
-        print(f"[WF][ERROR] Availability workflow failed: {exc}")
+        ctx = create_fallback_context(
+            source="api.routes.messages.trigger_availability",
+            trigger="workflow_failed",
+            event_id=event_id,
+            error=exc,
+        )
+        print(f"[FALLBACK] {ctx.source} | {ctx.trigger} | {exc}")
+        return "Room availability check encountered an issue. I'll follow up with availability options shortly."
 
 
 def _persist_confirmed_date(conversation_state: ConversationState, chosen_date: str) -> Dict[str, Any]:
     """Persist confirmed date and trigger availability workflow."""
+    from backend.utils.fallback import create_fallback_context
+
     conversation_state.event_info.event_date = chosen_date
     conversation_state.event_info.status = "Date Confirmed"
 
@@ -332,6 +365,10 @@ def _persist_confirmed_date(conversation_state: ConversationState, chosen_date: 
         "ts": datetime.utcnow().isoformat() + "Z",
         "body": f"The client confirms the preferred event date is {chosen_date}.",
     }
+
+    # Track any fallback messages to append to the response
+    fallback_notices: List[str] = []
+
     wf_res = {}
     try:
         wf_res = wf_process_msg(synthetic_msg)
@@ -340,7 +377,17 @@ def _persist_confirmed_date(conversation_state: ConversationState, chosen_date: 
             f"{wf_res.get('action')} event_id={wf_res.get('event_id')} intent={wf_res.get('intent')}"
         )
     except Exception as exc:
-        print(f"[WF][ERROR] Failed to persist confirmed date: {exc}")
+        ctx = create_fallback_context(
+            source="api.routes.messages.persist_confirmed_date",
+            trigger="persistence_failed",
+            event_id=conversation_state.event_id,
+            error=exc,
+        )
+        print(f"[FALLBACK] {ctx.source} | {ctx.trigger} | {exc}")
+        fallback_notices.append(
+            "I logged your confirmation, but our booking system didn't save the update. "
+            "I've escalated it for manual follow-up."
+        )
 
     event_id = wf_res.get("event_id") or conversation_state.event_id
     conversation_state.event_id = event_id
@@ -356,10 +403,10 @@ def _persist_confirmed_date(conversation_state: ConversationState, chosen_date: 
         except PayloadValidationError as exc:
             print(f"[WF][WARN] confirm_date payload validation failed: {exc}")
 
-    try:
-        _trigger_room_availability(event_id, chosen_date)
-    except Exception as exc:
-        print(f"[WF][ERROR] trigger availability failed: {exc}")
+    # Trigger availability and capture any error message
+    availability_error = _trigger_room_availability(event_id, chosen_date)
+    if availability_error:
+        fallback_notices.append(availability_error)
 
     rendered = render_step3_reply(conversation_state, wf_res.get("draft_messages"))
     actions: List[Dict[str, Any]] = []
@@ -380,6 +427,11 @@ def _persist_confirmed_date(conversation_state: ConversationState, chosen_date: 
             next_step="Availability result",
             thread_state="Checking",
         )
+
+    # Append any fallback notices to the response
+    if fallback_notices:
+        notice_text = "\n\n---\n\n" + "\n\n".join(fallback_notices)
+        assistant_reply = (assistant_reply or "") + notice_text
 
     return {
         "body": assistant_reply,

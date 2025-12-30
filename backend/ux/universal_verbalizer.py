@@ -337,16 +337,18 @@ def _contains_structured_content(text: str) -> bool:
     if "NEXT STEP:" in text_upper or "\nINFO:" in text_upper:
         return True
 
-    # Check for multiple consecutive bullet points (option lists)
+    # Check for multiple consecutive bullet points that are TRULY structured
+    # (e.g., product lists with prices, offer summaries with em-dashes)
+    # NOTE: Room availability lists with just "(capacity)" should be verbalized!
     bullet_count = sum(1 for line in lines if line.strip().startswith("- "))
     if bullet_count >= 3:
-        # Could be a product list or options list - check if it has structured format
-        # Look for patterns like "- Name — CHF X" or "- Date — Room (Status)"
-        structured_bullets = sum(
+        # Only treat as structured if it has pricing indicators (CHF + em-dash)
+        # This catches offer/product lists but NOT room availability lists
+        price_bullets = sum(
             1 for line in lines
-            if line.strip().startswith("- ") and ("—" in line or "CHF" in line or "(" in line)
+            if line.strip().startswith("- ") and "CHF" in line and "—" in line
         )
-        if structured_bullets >= 2:
+        if price_bullets >= 2:
             return True
 
     return False
@@ -399,24 +401,39 @@ def verbalize_message(
 
     # Check if LLM is available
     from backend.utils.openai_key import load_openai_api_key
+    from backend.utils.fallback import create_fallback_context, wrap_fallback
+
     api_key = load_openai_api_key(required=False)
     if not api_key:
-        logger.debug("universal_verbalizer: no API key, using fallback")
-        return fallback_text
+        ctx = create_fallback_context(
+            source="ux.verbalizer",
+            trigger="no_api_key",
+            step=context.step,
+            topic=context.topic,
+        )
+        return wrap_fallback(fallback_text, ctx)
 
     try:
         prompt_payload = _build_prompt(context, fallback_text, locale)
         llm_text = _call_llm(prompt_payload)
     except Exception as exc:
-        logger.warning(
-            f"universal_verbalizer: LLM call failed for step={context.step}, topic={context.topic}",
-            extra={"error": str(exc)},
+        ctx = create_fallback_context(
+            source="ux.verbalizer",
+            trigger="llm_call_failed",
+            step=context.step,
+            topic=context.topic,
+            error=exc,
         )
-        return fallback_text
+        return wrap_fallback(fallback_text, ctx)
 
     if not llm_text or not llm_text.strip():
-        logger.warning("universal_verbalizer: empty LLM response, using fallback")
-        return fallback_text
+        ctx = create_fallback_context(
+            source="ux.verbalizer",
+            trigger="empty_llm_response",
+            step=context.step,
+            topic=context.topic,
+        )
+        return wrap_fallback(fallback_text, ctx)
 
     # Verify hard facts preserved
     hard_facts = context.extract_hard_facts()
@@ -441,11 +458,20 @@ def verbalize_message(
             return patched_text
         else:
             # Patching didn't fully fix it - fall back to original text
+            missing_str = ", ".join(verification[1]) if verification[1] else "none"
+            invented_str = ", ".join(verification[2]) if verification[2] else "none"
+            ctx = create_fallback_context(
+                source="ux.verbalizer",
+                trigger="fact_verification_failed",
+                step=context.step,
+                topic=context.topic,
+                error=Exception(f"Missing: {missing_str}, Invented: {invented_str}"),
+            )
             logger.warning(
                 f"universal_verbalizer: patching failed for step={context.step}, topic={context.topic}, using fallback",
                 extra={"missing": verification[1], "invented": verification[2]},
             )
-            return fallback_text
+            return wrap_fallback(fallback_text, ctx)
 
     logger.debug(f"universal_verbalizer: success for step={context.step}, topic={context.topic}")
     return llm_text
@@ -701,12 +727,23 @@ def _verify_facts(
                 # Parse DD.MM.YYYY
                 if "." in date:
                     parsed = datetime.strptime(date, "%d.%m.%Y")
+                    day = parsed.day
+                    # Ordinal suffix
+                    ordinal = (
+                        "th" if 11 <= day <= 13
+                        else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+                    )
                     alt_formats = [
                         parsed.strftime("%d/%m/%Y"),
                         parsed.strftime("%Y-%m-%d"),
                         parsed.strftime("%d %B %Y"),  # "08 May 2026"
                         parsed.strftime("%B %d, %Y"),  # "May 08, 2026"
                         parsed.strftime("%-d %B %Y"),  # "8 May 2026" (no leading zero)
+                        # Ordinal formats: "15th of February, 2026" or "15th February 2026"
+                        f"{day}{ordinal} of {parsed.strftime('%B')}, {parsed.year}",
+                        f"{day}{ordinal} of {parsed.strftime('%B')} {parsed.year}",
+                        f"{day}{ordinal} {parsed.strftime('%B')} {parsed.year}",
+                        f"{day}{ordinal} {parsed.strftime('%B')}, {parsed.year}",
                     ]
                     for alt in alt_formats:
                         if alt in llm_text or alt.lower() in text_lower:
@@ -725,14 +762,21 @@ def _verify_facts(
         # Also check for "Room X" variations
         room_variants = [room_lower, room_no_dot]
         if room_lower.startswith("room "):
-            # "Room B" -> also accept "room b", "Room B", "ROOM B"
-            room_variants.append(room_lower.replace("room ", ""))
+            # "Room B" -> also accept just "B" but only if it's a meaningful identifier
+            # (longer than 1 char to avoid matching single letters like "a" in any text)
+            suffix = room_lower.replace("room ", "")
+            if len(suffix) > 1:  # Only add if it's a meaningful identifier
+                room_variants.append(suffix)
 
         found = any(variant in text_lower for variant in room_variants)
         if not found:
             missing.append(f"room:{room}")
 
     # Check amounts - flexible matching for CHF values
+    # Normalize text for Swiss format (remove apostrophes used as thousands separator)
+    text_no_apostrophe = llm_text.replace("'", "")
+    text_no_apostrophe_lower = text_no_apostrophe.lower()
+
     for amount in hard_facts.get("amounts", []):
         amount_found = False
         # Extract numeric value
@@ -748,17 +792,17 @@ def _verify_facts(
                 f"CHF{numeric_no_decimal}",
                 f"{numeric} CHF",
                 f"{numeric_no_decimal} CHF",
-                # Also check with thousands separator
-                f"CHF {int(float(numeric)):,}".replace(",", "'"),  # Swiss format: 1'000
-                f"CHF {int(float(numeric)):,}".replace(",", ","),  # 1,000 format
             ]
             for pattern in patterns_to_check:
-                if pattern.upper() in text_normalized or pattern.lower() in text_lower:
+                # Check in normalized text (spaces removed) and apostrophe-removed text
+                if (pattern.upper() in text_normalized or
+                    pattern.lower() in text_lower or
+                    pattern.lower() in text_no_apostrophe_lower):
                     amount_found = True
                     break
 
             # Also check if the raw number appears (context may make it clear it's CHF)
-            if not amount_found and numeric in llm_text:
+            if not amount_found and (numeric in llm_text or numeric in text_no_apostrophe):
                 amount_found = True
 
         if not amount_found:
@@ -842,8 +886,11 @@ def _verify_facts(
                 invented.append(f"date:{found_date}")
 
     # Check for invented amounts - be more lenient
+    # Use apostrophe-removed text for matching Swiss format (1'500 -> 1500)
     amount_pattern = re.compile(r"\bCHF\s*(\d+(?:[.,]\d{1,2})?)\b", re.IGNORECASE)
     canonical_amounts = set()
+    canonical_floats: List[float] = []  # For calculating valid subtotals
+
     for amt in hard_facts.get("amounts", []):
         normalized = amt.replace(" ", "").upper().replace(",", ".")
         match = re.search(r"CHF(\d+(?:\.\d{1,2})?)", normalized)
@@ -853,11 +900,30 @@ def _verify_facts(
             canonical_amounts.add(re.sub(r"\.00$", "", val))
             # Also add rounded versions
             try:
-                canonical_amounts.add(str(int(float(val))))
+                float_val = float(val)
+                canonical_amounts.add(str(int(float_val)))
+                canonical_floats.append(float_val)
             except ValueError:
                 pass
 
-    for match in amount_pattern.finditer(llm_text):
+    # Get counts for calculating valid subtotals (count * unit_price)
+    counts: List[int] = []
+    for count_str in hard_facts.get("counts", []):
+        try:
+            counts.append(int(count_str))
+        except ValueError:
+            pass
+
+    # Pre-calculate valid subtotals (count * per_person_amount)
+    # This allows amounts like "30 guests × CHF 18 = CHF 540"
+    for count in counts:
+        for price in canonical_floats:
+            subtotal = count * price
+            canonical_amounts.add(f"{subtotal:.2f}")
+            canonical_amounts.add(str(int(subtotal)))
+
+    # Search in apostrophe-removed text to handle Swiss format (CHF 1'500)
+    for match in amount_pattern.finditer(text_no_apostrophe):
         found_amount = match.group(1).replace(",", ".")
         found_no_decimal = re.sub(r"\.00$", "", found_amount)
         found_int = str(int(float(found_amount))) if "." in found_amount else found_amount

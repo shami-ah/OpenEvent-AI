@@ -688,24 +688,65 @@ def load_default_db_for_tools() -> Dict[str, Any]:
     """
     Helper to load the workflow DB for agent tool execution. Tools are
     deterministic and should share the same backing store as the workflow.
-    """
 
+    Returns:
+        Database dict. If loading fails, returns a dict with an error flag
+        so tools can report the issue instead of pretending there's no data.
+    """
     from backend.workflow_email import get_default_db  # pylint: disable=import-outside-toplevel
 
     try:
         return get_default_db()
-    except Exception:
-        # As a safety net, return an empty db to avoid crashing agent calls.
-        return {"events": [], "tasks": []}
+    except Exception as exc:
+        # Return a db with error flag so tools can surface the issue
+        from backend.utils.fallback import create_fallback_context
+        ctx = create_fallback_context(
+            source="agents.chatkit_runner.load_db",
+            trigger="db_load_failed",
+            error=exc,
+        )
+        print(f"[FALLBACK] {ctx.source} | {ctx.trigger} | {exc}")
+        return {
+            "events": [],
+            "tasks": [],
+            "_db_error": "Cannot reach the booking database. Please retry or contact support.",
+        }
 
 
-async def _fallback_stream(thread_id: str, message: Dict[str, Any], state: Dict[str, Any]) -> AsyncGenerator[str, None]:
+async def _fallback_stream(
+    thread_id: str,
+    message: Dict[str, Any],
+    state: Dict[str, Any],
+    *,
+    fallback_reason: Optional[str] = None,
+) -> AsyncGenerator[str, None]:
     """
     Deterministic fallback path when the Agents SDK is unavailable.
 
     We reuse the existing OpenEventAgent facade so behaviour mirrors the
     traditional workflow-backed path. The output is wrapped in SSE format.
+
+    Args:
+        thread_id: The conversation thread ID
+        message: The user message
+        state: Current conversation state
+        fallback_reason: If set, emit a diagnostic message before the response
     """
+    # Emit diagnostic message if we're falling back due to an error
+    if fallback_reason:
+        diagnostic = {
+            "type": "system_notice",
+            "message": f"[Streaming mode unavailable: {fallback_reason}] Switching to workflow mode.",
+        }
+        yield f"data: {json.dumps(diagnostic)}\n\n"
+        from backend.utils.fallback import create_fallback_context
+        ctx = create_fallback_context(
+            source="agents.chatkit_runner.stream",
+            trigger="sdk_unavailable",
+            thread_id=thread_id,
+            error=Exception(fallback_reason),
+        )
+        print(f"[FALLBACK] {ctx.source} | {ctx.trigger} | {fallback_reason}")
 
     agent = OpenEventAgent()
     session = agent.create_session(thread_id)
@@ -771,7 +812,9 @@ async def run_streamed(thread_id: str, message: Dict[str, Any], state: Dict[str,
         yield f"data: {json.dumps({'assistant_text': final.output_text})}\n\n"
     except Exception as exc:
         logger.warning("Agents SDK unavailable or failed (%s); using fallback workflow path.", exc)
-        async for chunk in _fallback_stream(thread_id, message, state):
+        # Pass fallback reason so UI knows streaming failed
+        fallback_reason = str(exc)[:100]  # Truncate long errors
+        async for chunk in _fallback_stream(thread_id, message, state, fallback_reason=fallback_reason):
             yield chunk
 
 
