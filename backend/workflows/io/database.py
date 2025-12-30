@@ -615,3 +615,105 @@ def clear_cached_rooms() -> None:
     """Clear the memoized room list (used by tests to reset state)."""
 
     _load_rooms_cached.cache_clear()
+
+
+def get_event_dates(
+    db: Dict[str, Any],
+    *,
+    exclude_event_id: Optional[str] = None,
+    exclude_cancelled: bool = True,
+) -> List[str]:
+    """[OpenEvent Database] Get all event dates from the database.
+
+    Returns dates in ISO format (YYYY-MM-DD) for all events.
+    Used for site visit conflict detection - site visits cannot be
+    booked on days when events are scheduled.
+
+    Args:
+        db: The database dict (from load_db)
+        exclude_event_id: Optionally exclude a specific event (e.g., current event)
+        exclude_cancelled: If True, exclude events with status 'Cancelled'
+
+    Returns:
+        List of ISO date strings (YYYY-MM-DD)
+    """
+    dates: List[str] = []
+
+    for event in db.get("events", []):
+        # Skip excluded event
+        if exclude_event_id and event.get("event_id") == exclude_event_id:
+            continue
+
+        # Skip cancelled events if requested
+        if exclude_cancelled:
+            status = event.get("status", "")
+            if status.lower() == "cancelled":
+                continue
+
+        # Get date from chosen_date (confirmed) or event_data
+        date_str = event.get("chosen_date")
+        if not date_str:
+            event_data = event.get("event_data", {})
+            date_str = event_data.get("Event Date")
+
+        if not date_str or date_str == "Not specified":
+            continue
+
+        # Normalize to ISO format
+        try:
+            if "." in date_str:
+                # dd.mm.yyyy format
+                day, month, year = map(int, date_str.split("."))
+                dates.append(f"{year:04d}-{month:02d}-{day:02d}")
+            elif "-" in date_str:
+                # Already ISO format
+                dates.append(date_str[:10])
+        except (ValueError, IndexError):
+            # Skip malformed dates
+            continue
+
+    return dates
+
+
+def get_site_visits_on_date(
+    db: Dict[str, Any],
+    date_iso: str,
+) -> List[Dict[str, Any]]:
+    """[OpenEvent Database] Get site visits scheduled on a specific date.
+
+    Used when booking an event - if there's a site visit on that day,
+    we allow the event but create a manager notification.
+
+    Args:
+        db: The database dict
+        date_iso: Date to check (YYYY-MM-DD format)
+
+    Returns:
+        List of event entries that have site visits on that date
+    """
+    visits: List[Dict[str, Any]] = []
+
+    for event in db.get("events", []):
+        sv_state = event.get("site_visit_state", {})
+        if sv_state.get("status") != "scheduled":
+            continue
+
+        # Get site visit date
+        sv_date = sv_state.get("date_iso") or sv_state.get("confirmed_date")
+        if not sv_date:
+            continue
+
+        # Normalize for comparison
+        try:
+            if "." in sv_date:
+                day, month, year = map(int, sv_date.split("."))
+                sv_date_iso = f"{year:04d}-{month:02d}-{day:02d}"
+            else:
+                sv_date_iso = sv_date[:10]
+        except (ValueError, IndexError):
+            continue
+
+        if sv_date_iso == date_iso:
+            visits.append(event)
+
+    return visits

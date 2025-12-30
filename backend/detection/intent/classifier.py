@@ -176,6 +176,26 @@ _QNA_KEYWORDS: Dict[str, Sequence[str]] = {
         "come by",
         "venue tour",
     ),
+    "site_visit_request": (
+        "book a site visit",
+        "schedule a visit",
+        "arrange a visit",
+        "can i visit",
+        "can we visit",
+        "would like to visit",
+        "want to see the room",
+        "want to see the venue",
+        "view the room",
+        "view the venue",
+        "check out the space",
+        "see the space",
+        "visit before",
+        "visit beforehand",
+        "come see",
+        "come and see",
+        "tour the room",
+        "tour of the room",
+    ),
     "parking_policy": (
         "parking",
         "car park",
@@ -331,6 +351,7 @@ QNA_TYPE_TO_STEP = {
     "products_for": 4,
     "request_option": 4,
     "site_visit_overview": 7,
+    "site_visit_request": 0,  # Can be initiated at ANY step (cross-step)
     "parking_policy": 0,  # General info, no specific step
     "confirm_booking": 7,
 }
@@ -435,6 +456,9 @@ def _step_anchor_from_qna(qna_types: Sequence[str]) -> Optional[str]:
     if not qna_types:
         return None
     for qna_type in qna_types:
+        # Site visit request - special cross-step handler
+        if qna_type in {"site_visit_request"}:
+            return "Site Visit"
         # NEW: Room search intents route to Room Availability
         if qna_type in {"check_availability", "check_capacity", "check_alternatives"}:
             return "Room Availability"
