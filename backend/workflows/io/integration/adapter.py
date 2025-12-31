@@ -115,6 +115,52 @@ class DatabaseAdapter:
         """Get available rooms."""
         raise NotImplementedError
 
+    # Extended event operations for workflow steps
+    def update_event_date(
+        self,
+        event_id: str,
+        date_iso: str,
+        *,
+        confirmed: bool = False,
+    ) -> Dict[str, Any]:
+        """Update event date (Step 2 - Date Confirmation)."""
+        raise NotImplementedError
+
+    def update_event_room(
+        self,
+        event_id: str,
+        room_id: str,
+        *,
+        status: str = "room_selected",
+    ) -> Dict[str, Any]:
+        """Update event room selection (Step 3 - Room Availability)."""
+        raise NotImplementedError
+
+    def update_event_billing(
+        self,
+        event_id: str,
+        products: List[Dict[str, Any]],
+        total: float,
+    ) -> Dict[str, Any]:
+        """Update event billing/products (Step 4 - Offer)."""
+        raise NotImplementedError
+
+    def append_audit(
+        self,
+        event_id: str,
+        action: str,
+        details: Dict[str, Any],
+    ) -> None:
+        """Append an audit trail entry."""
+        raise NotImplementedError
+
+    def get_context_snapshot(
+        self,
+        email: str,
+    ) -> Dict[str, Any]:
+        """Get conversation context for AI processing."""
+        raise NotImplementedError
+
 
 # =============================================================================
 # JSON Adapter (wraps existing database.py)
@@ -256,6 +302,90 @@ class JSONDatabaseAdapter(DatabaseAdapter):
         room_names = self._db_module.load_rooms()
         return [{"name": name, "id": name} for name in room_names]
 
+    def update_event_date(
+        self,
+        event_id: str,
+        date_iso: str,
+        *,
+        confirmed: bool = False,
+    ) -> Dict[str, Any]:
+        self.initialize()
+        db = self._load()
+        idx = self._db_module.find_event_idx_by_id(db, event_id)
+        if idx is None:
+            raise ValueError(f"Event {event_id} not found")
+
+        event = db["events"][idx]
+        self._db_module.update_event_date(event, date_iso, confirmed=confirmed)
+        self._save(db)
+        return event
+
+    def update_event_room(
+        self,
+        event_id: str,
+        room_id: str,
+        *,
+        status: str = "room_selected",
+    ) -> Dict[str, Any]:
+        self.initialize()
+        db = self._load()
+        idx = self._db_module.find_event_idx_by_id(db, event_id)
+        if idx is None:
+            raise ValueError(f"Event {event_id} not found")
+
+        event = db["events"][idx]
+        self._db_module.update_event_room(
+            event,
+            selected_room=room_id,
+            status=status,
+        )
+        self._save(db)
+        return event
+
+    def update_event_billing(
+        self,
+        event_id: str,
+        products: List[Dict[str, Any]],
+        total: float,
+    ) -> Dict[str, Any]:
+        self.initialize()
+        db = self._load()
+        idx = self._db_module.find_event_idx_by_id(db, event_id)
+        if idx is None:
+            raise ValueError(f"Event {event_id} not found")
+
+        event = db["events"][idx]
+        self._db_module.update_event_billing(event, products=products, total=total)
+        self._save(db)
+        return event
+
+    def append_audit(
+        self,
+        event_id: str,
+        action: str,
+        details: Dict[str, Any],
+    ) -> None:
+        self.initialize()
+        db = self._load()
+        idx = self._db_module.find_event_idx_by_id(db, event_id)
+        if idx is None:
+            raise ValueError(f"Event {event_id} not found")
+
+        event = db["events"][idx]
+        self._db_module.append_audit_entry(event, action, details)
+        self._save(db)
+
+    def get_context_snapshot(
+        self,
+        email: str,
+    ) -> Dict[str, Any]:
+        self.initialize()
+        db = self._load()
+        client = db.get("clients", {}).get(email.lower())
+        if not client:
+            return {}
+        return self._db_module.context_snapshot(db, client, email.lower())
+
 
 # =============================================================================
 # Supabase Adapter
@@ -349,6 +479,72 @@ class SupabaseDatabaseAdapter(DatabaseAdapter):
     def get_rooms(self, date_iso: Optional[str] = None) -> List[Dict[str, Any]]:
         self.initialize()
         return self._supabase_module.get_rooms(date_iso)
+
+    def update_event_date(
+        self,
+        event_id: str,
+        date_iso: str,
+        *,
+        confirmed: bool = False,
+    ) -> Dict[str, Any]:
+        self.initialize()
+        return self._supabase_module.update_event_date(event_id, date_iso)
+
+    def update_event_room(
+        self,
+        event_id: str,
+        room_id: str,
+        *,
+        status: str = "room_selected",
+    ) -> Dict[str, Any]:
+        self.initialize()
+        return self._supabase_module.update_event_room(
+            event_id,
+            selected_room=room_id,
+            status=status,
+        )
+
+    def update_event_billing(
+        self,
+        event_id: str,
+        products: List[Dict[str, Any]],
+        total: float,
+    ) -> Dict[str, Any]:
+        """Update billing in Supabase - creates/updates offer with line items."""
+        self.initialize()
+        # In Supabase, billing is stored as an offer with line items
+        return self._supabase_module.create_offer(
+            event_id=event_id,
+            line_items=products,
+            total_amount=total,
+        )
+
+    def append_audit(
+        self,
+        event_id: str,
+        action: str,
+        details: Dict[str, Any],
+    ) -> None:
+        """Append audit entry - in Supabase this could be a separate audit table."""
+        self.initialize()
+        # For now, audit entries are stored in event notes or a dedicated table
+        # This is a placeholder - full implementation depends on Supabase schema
+        logger.debug("Audit entry for %s: %s - %s", event_id, action, details)
+
+    def get_context_snapshot(
+        self,
+        email: str,
+    ) -> Dict[str, Any]:
+        """Get context for AI - combines client and event data from Supabase."""
+        self.initialize()
+        event = self._supabase_module.find_event_by_email(email)
+        if not event:
+            return {}
+        # Return in a format compatible with the workflow
+        return {
+            "event": event,
+            "last_message": event.get("event_data", {}).get("last_message"),
+        }
 
 
 # =============================================================================
