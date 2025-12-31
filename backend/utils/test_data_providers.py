@@ -137,74 +137,17 @@ def get_catering_menu_details(menu_slug: str) -> Optional[Dict[str, Any]]:
 
 def get_qna_items(category: Optional[str] = None, filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Get Q&A items, optionally filtered by category and other parameters."""
+    from backend.workflows.io.config_store import get_faq_items as load_faq_items
+
     filters = filters or {}
+
+    # Load FAQ items from database config (with fallback defaults)
+    raw_items = load_faq_items()
+
+    # Add empty related_links for display compatibility
     all_items = [
-        {
-            "category": "Parking",
-            "question": "Where can guests park?",
-            "answer": "The Atelier offers underground parking with 50 spaces available for event guests. Additional street parking is available nearby. Parking vouchers can be arranged for your guests at CHF 5 per vehicle for the full event duration.",
-            "related_links": []
-        },
-        {
-            "category": "Parking",
-            "question": "Is there disabled parking available?",
-            "answer": "Yes, we have 3 designated disabled parking spaces directly at the main entrance with level access to all event spaces. These spaces are wider than standard spots and connect to our accessible routes throughout the venue.",
-            "related_links": []
-        },
-        {
-            "category": "Parking",
-            "question": "Can we reserve parking spaces for VIP guests?",
-            "answer": "Absolutely! We can reserve specific parking spaces closest to the entrance for your VIP guests. Please let us know how many VIP spaces you need when finalizing your booking.",
-            "related_links": []
-        },
-        {
-            "category": "Catering",
-            "question": "Can you accommodate dietary restrictions?",
-            "answer": "Absolutely! All our menus can be adapted for vegetarian, vegan, gluten-free, and other dietary requirements. Our chef team is experienced in handling allergies and religious dietary needs. Please inform us of any restrictions when booking, and we'll create appropriate alternatives.",
-            "related_links": []
-        },
-        {
-            "category": "Catering",
-            "question": "Can we bring our own catering?",
-            "answer": "While we prefer to use our in-house catering team who know our facilities best, we can accommodate external catering for special circumstances. A kitchen usage fee of CHF 500 applies, and external caterers must provide food safety certification.",
-            "related_links": []
-        },
-        {
-            "category": "Booking",
-            "question": "How far in advance should I book?",
-            "answer": "We recommend booking at least 4 weeks in advance for the best availability. For peak seasons (May-June, September-October, and December), 6-8 weeks advance booking is advisable. We can sometimes accommodate last-minute requests, so always feel free to ask!",
-            "related_links": []
-        },
-        {
-            "category": "Booking",
-            "question": "What's your cancellation policy?",
-            "answer": "Cancellations made more than 30 days before the event: Full refund minus CHF 200 admin fee. 14-30 days: 50% refund. Less than 14 days: No refund, but we'll try to reschedule if possible. We strongly recommend event insurance for large bookings.",
-            "related_links": []
-        },
-        {
-            "category": "Equipment",
-            "question": "What AV equipment is included?",
-            "answer": "All rooms include: HD projector or LED screen, wireless microphones, sound system, WiFi, and basic lighting. Additional equipment like recording devices, live streaming setup, or special lighting can be arranged for an extra fee.",
-            "related_links": []
-        },
-        {
-            "category": "Equipment",
-            "question": "Can we live stream our event?",
-            "answer": "Yes! Rooms B, C, and Punkt.Null are equipped with live streaming capabilities. We provide the technical setup and can assign a technician to manage the stream. Streaming to up to 500 viewers is included; larger audiences require upgraded bandwidth.",
-            "related_links": []
-        },
-        {
-            "category": "Access",
-            "question": "Is the venue wheelchair accessible?",
-            "answer": "Yes, The Atelier is fully wheelchair accessible. We have ramps to all entrances, an elevator to all floors, accessible restrooms on each level, and adjustable-height presentation equipment. Please let us know about any specific accessibility needs.",
-            "related_links": []
-        },
-        {
-            "category": "Access",
-            "question": "How early can we access the venue for setup?",
-            "answer": "Standard bookings include 1 hour setup time. For elaborate setups, we can arrange early access from 2-4 hours before your event start time for an additional CHF 100 per hour. Our team can also assist with setup if needed.",
-            "related_links": []
-        }
+        {**item, "related_links": item.get("related_links", [])}
+        for item in raw_items
     ]
 
     categories = sorted(list(set(item["category"] for item in all_items)))

@@ -23,6 +23,7 @@ from backend.detection.special.room_conflict import (
     detect_conflict_type,
     handle_hard_conflict,
 )
+from backend.workflows.io.config_store import get_timezone
 
 from .. import OpenEventAction
 
@@ -37,7 +38,10 @@ __all__ = [
     "HandleSiteVisitRoute",
 ]
 
-LOCAL_TZ = ZoneInfo("Europe/Zurich")
+
+def _get_venue_tz() -> ZoneInfo:
+    """Return venue timezone as ZoneInfo from config."""
+    return ZoneInfo(get_timezone())
 VISIT_DURATION_MIN = 45
 BUSINESS_START_HOUR = 9
 BUSINESS_END_HOUR = 18
@@ -104,17 +108,18 @@ def _parse_client_dt(raw: str) -> Optional[datetime]:
                 continue
         else:
             return None
+    tz = _get_venue_tz()
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=LOCAL_TZ)
-    return parsed.astimezone(LOCAL_TZ)
+        return parsed.replace(tzinfo=tz)
+    return parsed.astimezone(tz)
 
 
 def _format_slot(dt: datetime) -> str:
-    return dt.astimezone(LOCAL_TZ).strftime("%A, %d.%m.%Y at %H:%M")
+    return dt.astimezone(_get_venue_tz()).strftime("%A, %d.%m.%Y at %H:%M")
 
 
 def _iso_with_tz(dt: datetime) -> str:
-    return dt.astimezone(LOCAL_TZ).replace(second=0, microsecond=0).isoformat()
+    return dt.astimezone(_get_venue_tz()).replace(second=0, microsecond=0).isoformat()
 
 
 def _slot_bounds(start: datetime, duration_min: int, room: Dict[str, Any]) -> Tuple[datetime, datetime, datetime, datetime]:
@@ -128,6 +133,7 @@ def _slot_bounds(start: datetime, duration_min: int, room: Dict[str, Any]) -> Tu
 
 def _busy_to_windows(entries: Iterable[Dict[str, Any]]) -> List[Tuple[datetime, datetime, Dict[str, Any]]]:
     windows: List[Tuple[datetime, datetime, Dict[str, Any]]] = []
+    tz = _get_venue_tz()
     for item in entries:
         start_raw = item.get("start")
         end_raw = item.get("end")
@@ -139,9 +145,9 @@ def _busy_to_windows(entries: Iterable[Dict[str, Any]]) -> List[Tuple[datetime, 
         except ValueError:
             continue
         if start.tzinfo is None:
-            start = start.replace(tzinfo=LOCAL_TZ)
+            start = start.replace(tzinfo=tz)
         if end.tzinfo is None:
-            end = end.replace(tzinfo=LOCAL_TZ)
+            end = end.replace(tzinfo=tz)
         windows.append((start, end, item))
     return windows
 
@@ -459,7 +465,7 @@ def _slot_selected_in_text(text: Optional[str], slot: datetime) -> bool:
 
 def _slots_for_day(day: datetime) -> List[datetime]:
     slots: List[datetime] = []
-    base = day.astimezone(LOCAL_TZ)
+    base = day.astimezone(_get_venue_tz())
     available_hours = (9, 11, 14, 16)
     for hour in available_hours:
         candidate = base.replace(hour=hour, minute=0, second=0, microsecond=0)
@@ -479,7 +485,7 @@ def _generate_suggestions_for_room(
     days_checked = 0
     current = now + timedelta(hours=1)
     # Round to start of day in local tz
-    day_cursor = datetime.combine(current.date(), time(hour=BUSINESS_START_HOUR), tzinfo=LOCAL_TZ)
+    day_cursor = datetime.combine(current.date(), time(hour=BUSINESS_START_HOUR), tzinfo=_get_venue_tz())
     while len(suggestions) < limit and days_checked < 21:
         for slot in _slots_for_day(day_cursor):
             if slot <= now:
@@ -904,7 +910,7 @@ class HandlePostOfferRoute(OpenEventAction):
         question_text = classification.get("extracted_fields", {}).get("user_question_text") or "your question"
         status_label = _current_status_label(event_data)
         message = (
-            f"Thanks for the note. I'll dig into "{question_text}" and circle back shortly. "
+            f"Thanks for the note. I'll dig into '{question_text}' and circle back shortly. "
             f"Status remains {status_label} while I gather the info."
         )
         note = "question: acknowledgement"
@@ -987,7 +993,7 @@ class HandleSiteVisitRoute(OpenEventAction):
         calendar_payload = _load_calendar(calendar_dir, calendar_id)
         busy_entries = calendar_payload.get("busy", [])
 
-        now = datetime.now(tz=LOCAL_TZ)
+        now = datetime.now(tz=_get_venue_tz())
         self._maybe_send_post_visit_followup(
             client=client,
             client_id=client_id,

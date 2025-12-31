@@ -37,6 +37,7 @@ from backend.workflows.change_propagation import (
 from backend.workflows.qna.engine import build_structured_qna_result
 from backend.workflows.qna.extraction import ensure_qna_extraction
 from backend.workflows.io.database import append_audit_entry, load_rooms, update_event_metadata, update_event_room
+from backend.workflows.io.config_store import get_catering_teaser_products, get_currency_code
 # MIGRATED: from backend.workflows.common.conflict -> backend.detection.special.room_conflict
 from backend.detection.special.room_conflict import (
     ConflictType,
@@ -790,16 +791,19 @@ def process(state: WorkflowState) -> GroupResult:
     verbalizer_products: List[Dict[str, Any]] = []
     # Only add catering teaser if client mentioned neither catering nor equipment
     if not has_catering_request and not has_equipment_request:
-        intro_lines.append("")  # Paragraph break
-        intro_lines.append(
-            "Would you like to add catering? Our Classic Apéro (CHF 18/person) and "
-            "Coffee & Tea service (CHF 7.50/person) are popular choices."
-        )
-        # Pass catering products to verbalizer so it knows these amounts are valid
-        verbalizer_products = [
-            {"name": "Classic Apéro", "unit_price": 18.0, "unit": "per_person"},
-            {"name": "Coffee & Tea service", "unit_price": 7.50, "unit": "per_person"},
-        ]
+        teaser_products = get_catering_teaser_products()
+        if teaser_products:
+            currency = get_currency_code()
+            product_strs = [
+                f"{p['name']} ({currency} {p['unit_price']:.2f}/person)"
+                for p in teaser_products[:2]
+            ]
+            intro_lines.append("")  # Paragraph break
+            intro_lines.append(
+                f"Would you like to add catering? Our {' and '.join(product_strs)} are popular choices."
+            )
+            # Pass catering products to verbalizer so it knows these amounts are valid
+            verbalizer_products = teaser_products[:2]
 
     # body_markdown = ONLY conversational prose (structured data is in table_blocks)
     # Use double newline for paragraph breaks (empty strings in list)

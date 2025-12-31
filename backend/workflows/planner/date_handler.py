@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from backend.workflows.common.datetime_parse import build_window_iso
 from backend.workflows.common.timeutils import format_iso_date_to_ddmmyyyy
+from backend.workflows.io.config_store import get_timezone
 from backend.workflows.steps.step1_intake.condition.checks import suggest_dates
 from backend.workflows.steps.step2_date_confirmation.trigger.types import ConfirmationWindow
 
@@ -113,7 +114,7 @@ def window_to_payload(window: ConfirmationWindow) -> Dict[str, Any]:
         "end_time": window.end_time,
         "start_iso": window.start_iso,
         "end_iso": window.end_iso,
-        "tz": getattr(window, "tz", "Europe/Zurich"),
+        "tz": getattr(window, "tz", None) or get_timezone(),
         "inherited_times": getattr(window, "inherited_times", False),
         "partial": getattr(window, "partial", False),
         "source_message_id": getattr(window, "source_message_id", None),
@@ -421,7 +422,7 @@ def apply_date_confirmation(planner: "_ShortcutPlanner", window_payload: Dict[st
     start = window_payload.get("start_time")
     end = window_payload.get("end_time")
     iso = window_payload.get("display_date")
-    tz = window_payload.get("tz", "Europe/Zurich")
+    tz = window_payload.get("tz") or get_timezone()
 
     if start and end:
         slot = f"{start}–{end}"

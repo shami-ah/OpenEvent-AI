@@ -58,6 +58,7 @@ from backend.workflows.change_propagation import (
 from backend.workflows.qna.engine import build_structured_qna_result
 from backend.workflows.qna.extraction import ensure_qna_extraction
 from backend.workflows.io.database import append_audit_entry, update_event_metadata
+from backend.workflows.io.config_store import get_product_autofill_threshold
 from backend.workflows.common.timeutils import format_iso_date_to_ddmmyyyy
 from backend.workflows.common.pricing import build_deposit_info, derive_room_rate, normalise_rate
 from backend.workflows.nlu import detect_general_room_query, detect_sequential_workflow_request
@@ -518,7 +519,7 @@ def process(state: WorkflowState) -> GroupResult:
     autofilled = _autofill_products_from_preferences(
         event_entry,
         state.user_info or {},
-        min_score=0.5,  # TODO(openevent): expose as configurable threshold
+        min_score=get_product_autofill_threshold(),
     )
     if autofilled:
         state.extras["persist"] = True

@@ -24,9 +24,21 @@ from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
 import logging
 
+from backend.workflows.io.config_store import (
+    get_timezone,
+    get_from_email,
+    get_from_name,
+    get_frontend_url,
+)
+
 logger = logging.getLogger(__name__)
 
-ZURICH_TZ = ZoneInfo("Europe/Zurich")
+
+def _get_venue_timezone() -> ZoneInfo:
+    """Get venue timezone from config."""
+    return ZoneInfo(get_timezone())
+
+
 
 
 # =============================================================================
@@ -47,6 +59,10 @@ def get_hil_email_config() -> Dict[str, Any]:
     """
     from backend.workflow_email import load_db
 
+    # Get venue-specific defaults from config store
+    venue_from_email = get_from_email()
+    venue_from_name = get_from_name()
+
     config = {
         "enabled": False,
         "manager_email": None,
@@ -54,8 +70,8 @@ def get_hil_email_config() -> Dict[str, Any]:
         "smtp_port": int(os.getenv("SMTP_PORT", "587")),
         "smtp_user": os.getenv("SMTP_USER"),
         "smtp_password": os.getenv("SMTP_PASSWORD"),
-        "from_email": os.getenv("HIL_FROM_EMAIL", "openevent@atelier.ch"),
-        "from_name": os.getenv("HIL_FROM_NAME", "OpenEvent AI"),
+        "from_email": os.getenv("HIL_FROM_EMAIL", venue_from_email),
+        "from_name": os.getenv("HIL_FROM_NAME", venue_from_name),
     }
 
     # Check database config first
@@ -105,7 +121,7 @@ def _build_hil_email_html(
     draft_body: str,
     event_summary: Optional[Dict[str, Any]] = None,
     task_id: str = "",
-    frontend_url: str = "http://localhost:3000",
+    frontend_url: Optional[str] = None,
 ) -> str:
     """
     Build HTML email for HIL notification.
@@ -122,6 +138,10 @@ def _build_hil_email_html(
     Returns:
         HTML email body
     """
+    # Use config for frontend URL if not provided
+    if frontend_url is None:
+        frontend_url = get_frontend_url()
+
     # Task type display names
     task_type_names = {
         "offer_message": "Offer Message",
@@ -218,9 +238,12 @@ def _build_hil_email_plain(
     draft_body: str,
     event_summary: Optional[Dict[str, Any]] = None,
     task_id: str = "",
-    frontend_url: str = "http://localhost:3000",
+    frontend_url: Optional[str] = None,
 ) -> str:
     """Build plain text email for HIL notification."""
+    # Use config for frontend URL if not provided
+    if frontend_url is None:
+        frontend_url = get_frontend_url()
     task_type_names = {
         "offer_message": "Offer Message",
         "date_confirmation_message": "Date Confirmation",
@@ -306,8 +329,8 @@ def send_hil_notification(
         return {"success": False, "error": "SMTP credentials not configured"}
 
     try:
-        # Build email
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        # Build email - use config store with env var override
+        frontend_url = os.getenv("FRONTEND_URL") or get_frontend_url()
 
         subject = f"[OpenEvent] HIL: {task_type.replace('_', ' ').title()} - {client_name}"
 

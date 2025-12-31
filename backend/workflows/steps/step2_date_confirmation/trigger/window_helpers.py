@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from backend.workflows.common.types import WorkflowState
 from backend.workflows.io.dates import next5
+from backend.workflows.io.config_store import get_timezone
 
 from .types import WindowHints
 from .date_parsing import (
@@ -99,7 +100,7 @@ def _candidate_dates_for_constraints(
     hints = window_hints or _resolve_window_hints(constraints, state)
     month_hint, weekday_hint, _ = hints
     reference_day = _reference_date_from_state(state)
-    rules: Dict[str, Any] = {"timezone": "Europe/Zurich"}
+    rules: Dict[str, Any] = {"timezone": get_timezone()}
     if month_hint:
         rules["month"] = month_hint
     weekday_tokens: List[Any] = []

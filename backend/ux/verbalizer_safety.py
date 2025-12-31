@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from backend.ux.verbalizer_payloads import RoomOfferFacts
+from backend.workflows.io.config_store import get_currency_regex
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,15 @@ class VerificationResult:
 
 # Regex patterns for fact extraction
 DATE_PATTERN = re.compile(r"\b(\d{1,2}\.\d{1,2}\.\d{4})\b")
+# Legacy constant (use _get_currency_pattern() for dynamic currency code)
 CURRENCY_PATTERN = re.compile(r"\b(CHF\s*\d+(?:[.,]\d{1,2})?)\b", re.IGNORECASE)
 TIME_PATTERN = re.compile(r"\b(\d{1,2}:\d{2}(?:–\d{1,2}:\d{2})?)\b")
 PARTICIPANT_COUNT_PATTERN = re.compile(r"\b(\d+)\s*(?:people|persons|participants|guests|attendees|pax)\b", re.IGNORECASE)
+
+
+def _get_currency_pattern() -> re.Pattern:
+    """Get currency pattern from config (dynamic based on venue currency code)."""
+    return get_currency_regex()
 
 
 def extract_hard_facts(facts: RoomOfferFacts) -> HardFacts:
@@ -120,8 +127,8 @@ def _extract_facts_from_text(text: str) -> HardFacts:
     for match in DATE_PATTERN.finditer(text):
         result.dates.add(match.group(1))
 
-    # Extract currency amounts
-    for match in CURRENCY_PATTERN.finditer(text):
+    # Extract currency amounts (uses dynamic pattern from venue config)
+    for match in _get_currency_pattern().finditer(text):
         result.currency_amounts.add(_normalize_currency(match.group(1)))
 
     # Extract time strings

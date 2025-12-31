@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 
 from zoneinfo import ZoneInfo
 
+from backend.workflows.io.config_store import get_timezone
 from backend.workflows.conditions.checks import has_event_date as _has_event_date
 from backend.workflows.conditions.checks import is_event_request as _is_event_request
 from backend.workflows.steps.step3_room_availability.condition.decide import (
@@ -18,7 +19,9 @@ from backend.workflows.steps.step3_room_availability.condition.decide import (
 __workflow_role__ = "condition"
 
 
-_ZURICH_TZ = ZoneInfo("Europe/Zurich")
+def _get_venue_tz() -> ZoneInfo:
+    """Return venue timezone as ZoneInfo from config."""
+    return ZoneInfo(get_timezone())
 
 
 @lru_cache(maxsize=1)
@@ -82,15 +85,16 @@ def suggest_dates(
 ) -> List[str]:
     """[Condition] Offer candidate dates for a preferred room when missing."""
 
-    today = datetime.now(_ZURICH_TZ).date()
+    tz = _get_venue_tz()
+    today = datetime.now(tz).date()
     start_date = today
     if start_from_iso:
         try:
             start_dt = datetime.fromisoformat(str(start_from_iso).replace("Z", "+00:00"))
             if start_dt.tzinfo is None:
-                start_dt = start_dt.replace(tzinfo=_ZURICH_TZ)
+                start_dt = start_dt.replace(tzinfo=tz)
             else:
-                start_dt = start_dt.astimezone(_ZURICH_TZ)
+                start_dt = start_dt.astimezone(tz)
             start_date = start_dt.date()
         except ValueError:
             start_date = today

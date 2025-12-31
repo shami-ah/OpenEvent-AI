@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.workflow_email import load_db as wf_load_db
+from backend.workflows.io.config_store import get_venue_name
 
 
 router = APIRouter(prefix="/api/emails", tags=["emails"])
@@ -171,10 +172,11 @@ async def send_offer_email(request: SendOfferEmailRequest):
             body_lines.append(request.custom_message)
             body_lines.append("")
 
+        venue_name = get_venue_name()
         body_lines.extend([
             f"Dear {client_name},",
             "",
-            f"Thank you for your interest in booking with The Atelier.",
+            f"Thank you for your interest in booking with {venue_name}.",
             "",
             f"We are pleased to offer the following for your event:",
             "",
@@ -190,7 +192,7 @@ async def send_offer_email(request: SendOfferEmailRequest):
             "Please let us know if you have any questions or would like to proceed.",
             "",
             "Best regards,",
-            "The Atelier Team",
+            f"{venue_name} Team",
         ])
 
         body_text = "\n".join(body_lines)

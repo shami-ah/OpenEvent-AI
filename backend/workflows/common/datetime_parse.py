@@ -7,10 +7,14 @@ from datetime import date, datetime, time, timedelta
 from typing import List, Optional, Tuple
 
 from backend.workflows.common.relative_dates import resolve_relative_date
+from backend.workflows.io.config_store import get_timezone
 
 from zoneinfo import ZoneInfo
 
-TZ_ZURICH = ZoneInfo("Europe/Zurich")
+
+def _get_venue_tz() -> ZoneInfo:
+    """Return venue timezone as ZoneInfo from config."""
+    return ZoneInfo(get_timezone())
 
 _MONTHS = {
     "jan": 1,
@@ -271,8 +275,9 @@ def build_window_iso(iso_date: str, start: time, end: time) -> Tuple[str, str]:
     """Compose timezone-aware ISO start/end from date and time components."""
 
     day = datetime.fromisoformat(iso_date)
-    start_dt = datetime.combine(day.date(), start, tzinfo=TZ_ZURICH)
-    end_dt = datetime.combine(day.date(), end, tzinfo=TZ_ZURICH)
+    tz = _get_venue_tz()
+    start_dt = datetime.combine(day.date(), start, tzinfo=tz)
+    end_dt = datetime.combine(day.date(), end, tzinfo=tz)
     if end_dt <= start_dt:
         end_dt += timedelta(days=1)
     return start_dt.isoformat(), end_dt.isoformat()
@@ -319,8 +324,9 @@ def _build_time(hour_str: Optional[str], minute_str: Optional[str], suffix: Opti
 def _adjust_end_if_needed(start: time, end: time) -> time:
     if end > start:
         return end
-    start_dt = datetime.combine(date.today(), start, tzinfo=TZ_ZURICH)
-    end_dt = datetime.combine(date.today(), end, tzinfo=TZ_ZURICH)
+    tz = _get_venue_tz()
+    start_dt = datetime.combine(date.today(), start, tzinfo=tz)
+    end_dt = datetime.combine(date.today(), end, tzinfo=tz)
     if end_dt <= start_dt:
         end_dt += timedelta(hours=12)
     return end_dt.time()
@@ -365,7 +371,6 @@ def enumerate_month_weekday(year: int, month: int, weekday: int) -> List[date]:
 
 
 __all__ = [
-    "TZ_ZURICH",
     "parse_first_date",
     "to_ddmmyyyy",
     "to_iso_date",

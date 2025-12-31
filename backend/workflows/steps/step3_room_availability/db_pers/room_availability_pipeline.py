@@ -17,8 +17,12 @@ from zoneinfo import ZoneInfo
 from backend.adapters.calendar_adapter import CalendarAdapter
 from backend.adapters.client_gui_adapter import ClientGUIAdapter
 from backend.workflows.io.database import load_db as _load_db, save_db as _save_db
+from backend.workflows.io.config_store import get_timezone, get_venue_name
 
-TZ = ZoneInfo("Europe/Zurich")
+
+def _get_venue_tz() -> ZoneInfo:
+    """Return venue timezone as ZoneInfo from config."""
+    return ZoneInfo(get_timezone())
 TIME_SHIFTS = [
     (-30, "shift -30m"),
     (30, "shift +30m"),
@@ -46,7 +50,7 @@ def now_iso() -> str:
     """[Condition] Current UTC timestamp formatted for logs."""
 
     return (
-        datetime.now(tz=TZ)
+        datetime.now(tz=_get_venue_tz())
         .astimezone(ZoneInfo("UTC"))
         .isoformat(timespec="seconds")
         .replace("+00:00", "Z")
@@ -166,10 +170,11 @@ def build_requested_windows(event_data: Dict[str, Any]) -> Tuple[List[RequestedW
         dates = [str(date_raw)]
 
     requested: List[RequestedWindow] = []
+    tz = _get_venue_tz()
     for value in dates:
         base = parse_date(value)
-        start_dt = datetime.combine(base.date(), start_time, tzinfo=TZ)
-        end_dt = datetime.combine(base.date(), end_time, tzinfo=TZ)
+        start_dt = datetime.combine(base.date(), start_time, tzinfo=tz)
+        end_dt = datetime.combine(base.date(), end_time, tzinfo=tz)
         requested.append(RequestedWindow(date=base.strftime("%Y-%m-%d"), start=start_dt, end=end_dt))
 
     overall = {"start": requested[0].start.isoformat(), "end": requested[-1].end.isoformat()}
@@ -532,9 +537,10 @@ def compose_reply(
             bullets = "\n".join(bullet_lines)
         else:
             bullets = "• (alternative time slots available)"
+        venue = get_venue_name()
         body = (
             f"Hi {name},\n\n"
-            "The requested time isn’t fully free, but we can offer these options at the Atelier:\n\n"
+            f"The requested time isn't fully free, but we can offer these options at {venue}:\n\n"
             f"{bullets}\n\n"
             "Let me know which option you prefer, or share alternative dates and I’ll recheck immediately.\n\n"
             "Best,\nEvent Manager"
@@ -554,7 +560,7 @@ def compose_reply(
 def to_display_time(value: str) -> str:
     """[LLM] Convert ISO timestamps into venue-local time strings."""
 
-    dt = parse_iso_datetime(value).astimezone(TZ)
+    dt = parse_iso_datetime(value).astimezone(_get_venue_tz())
     return dt.strftime("%H:%M")
 
 

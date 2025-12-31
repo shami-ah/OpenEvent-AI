@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from backend.utils.openai_key import load_openai_api_key
 from backend.ux.verb_rubric import enforce as enforce_rubric
+from backend.workflows.io.config_store import get_currency_code
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +335,9 @@ def _build_room_offer_prompt(
     else:
         locale_instruction = "Write the response in English. "
 
+    # Get currency code from venue config
+    currency = get_currency_code()
+
     system_content = f"""You are OpenEvent's professional event manager for a premium venue.
 
 {locale_instruction}Your task is to present room options and offer details to a client in a concise, competent, and direct tone.
@@ -346,7 +350,7 @@ STYLE GUIDELINES:
 STRICT RULES:
 1. You MUST include ALL dates exactly as provided (format: DD.MM.YYYY)
 2. You MUST include ALL room names exactly as provided
-3. You MUST include ALL prices exactly as provided (format: CHF XX or CHF XX.XX)
+3. You MUST include ALL prices exactly as provided (format: {currency} XX or {currency} XX.XX)
 4. You MUST include the participant count if provided
 5. You MUST NOT invent any new dates, prices, room names, or numeric values
 6. You MUST NOT change any numbers, dates, or prices

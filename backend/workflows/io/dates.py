@@ -9,9 +9,12 @@ except ImportError:  # pragma: no cover
     ZoneInfo = None  # type: ignore[misc,assignment]
 
 from backend.workflows.steps.step1_intake.condition.checks import blackout_days
+from backend.workflows.io.config_store import get_timezone
 
 
-DEFAULT_TIMEZONE = "Europe/Zurich"
+def _get_default_timezone() -> str:
+    """Return venue timezone from config."""
+    return get_timezone()
 _MAX_LOOKAHEAD_DAYS = 730
 
 
@@ -78,11 +81,11 @@ def dates_in_month_weekday(
     weekday_hint: Optional[Any],
     *,
     limit: int = 5,
-    timezone: str = DEFAULT_TIMEZONE,
+    timezone: Optional[str] = None,
 ) -> List[str]:
     """Return up to `limit` future ISO dates matching the given month/weekday."""
 
-    rules: Dict[str, Any] = {"timezone": timezone}
+    rules: Dict[str, Any] = {"timezone": timezone or _get_default_timezone()}
     if month_hint:
         rules["month"] = month_hint
     if weekday_hint:
@@ -143,7 +146,7 @@ def closest_alternatives(
 
 
 def _resolve_start_date(base_or_today: Optional[Any], rules: Optional[Dict[str, Any]]) -> date:
-    tz_name = (rules or {}).get("timezone") or DEFAULT_TIMEZONE
+    tz_name = (rules or {}).get("timezone") or _get_default_timezone()
     tz = ZoneInfo(tz_name) if ZoneInfo else None
     today = datetime.now(tz).date() if tz else datetime.utcnow().date()
 

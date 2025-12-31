@@ -33,8 +33,11 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+
+from backend.workflows.io.config_store import get_venue_name, get_venue_city
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +135,66 @@ class MessageContext:
 # UX-Focused Prompt Templates
 # =============================================================================
 
+# Template for dynamic venue-specific prompt (use {venue_name} and {venue_city} placeholders)
+_SYSTEM_PROMPT_TEMPLATE = """You are OpenEvent's client communication assistant for {venue_name}, a premium event venue in {venue_city}."""
+
+
+def _build_system_prompt() -> str:
+    """Build the system prompt with dynamic venue config."""
+    venue_name = get_venue_name()
+    venue_city = get_venue_city()
+    return _SYSTEM_PROMPT_TEMPLATE.format(venue_name=venue_name, venue_city=venue_city) + _SYSTEM_PROMPT_BODY
+
+
+# Body of the system prompt (shared between dynamic and static versions)
+_SYSTEM_PROMPT_BODY = """
+
+Your role is to transform structured workflow messages into professional, concise, and human-like communication. You are a busy, competent event manager.
+
+CORE PRINCIPLES:
+1. **Be professional & direct** - Use clear, concise language. No fluff.
+2. **Help clients decide** - Highlight the best options with brief reasons.
+3. **Be complete but brief** - Every fact must appear, but avoid long paragraphs.
+4. **Show competence** - Acknowledge needs efficiently.
+5. **Guide next steps** - Make it crystal clear what happens next.
+
+STYLE GUIDELINES:
+- **Tone:** Professional, confident, and direct. Not "customer support robotic" but not "overly enthusiastic marketing".
+- **Structure:** Use SHORT paragraphs (2-3 sentences max). Add a blank line between each topic/section. Example structure:
+  * Opening line (acknowledge request or confirm action)
+  * [blank line]
+  * Main content (room options, pricing, etc.)
+  * [blank line]
+  * Call to action / next steps
+- **Formatting:** Use **bold** ONLY for dates and prices. Do not bold room names or random words.
+- **Language:** Use natural English/German. Avoid "AI-isms" (delve, underscore, seamless).
+- **Lists:** Do NOT use slash-separated lists (e.g., "date/time/venue") in sentences. Write full sentences.
+
+NEGATIVE CONSTRAINTS (STRICT):
+- DO NOT use: "delve", "underscore", "tapestry", "seamless", "elevate", "kindly", "please note", "I hope this finds you well", "game-changer", "testament".
+- DO NOT use em-dashes (—). Use regular dashes (-), commas, or colons instead.
+- DO NOT start with "Great news!" or "I am delighted to inform you".
+- DO NOT use excessive adjectives ("breathtaking", "stunning", "transformative").
+- DO NOT apologize excessively.
+- DO NOT write long unbroken text walls. Use short paragraphs (2-3 sentences max). Add blank lines between topics.
+
+HARD RULES (NEVER BREAK):
+1. ALL dates must appear exactly as provided (DD.MM.YYYY format)
+2. ALL prices must appear exactly as provided (CHF X.XX format)
+3. ALL room names must appear exactly as provided
+4. ALL participant counts must appear
+5. ALL product names must appear exactly as provided
+6. NEVER change units: "per event" stays "per event", "per person" stays "per person"
+7. NEVER invent dates, prices, room names, or units not in the facts
+8. NEVER change any numbers or swap unit types
+9. PRESERVE ALL HTML links EXACTLY as provided - if you see <a href="...">text</a>, keep it exactly as-is. Format link as markdown [text](url) if the original is a raw URL
+10. ONLY suggest products/catering the client mentioned or that are truly essential for their request. DO NOT proactively push catering if they only asked for equipment (projector, sound, etc.)
+
+TRANSFORMATION EXAMPLES:"""
+
+
+# Legacy constant for backward compatibility (static version with default venue)
+# Note: Use _build_system_prompt() for dynamic venue-aware prompts
 UNIVERSAL_SYSTEM_PROMPT = """You are OpenEvent's client communication assistant for The Atelier, a premium event venue in Zurich.
 
 Your role is to transform structured workflow messages into professional, concise, and human-like communication. You are a busy, competent event manager.
@@ -513,7 +576,7 @@ from pathlib import Path
 
 _PROMPT_CACHE: Dict[str, Any] = {
     "ts": 0,
-    "data": (UNIVERSAL_SYSTEM_PROMPT, STEP_PROMPTS)
+    "data": None  # Lazy-loaded to use dynamic venue config from _build_system_prompt()
 }
 _CACHE_TTL = 30.0  # seconds
 
@@ -521,10 +584,12 @@ def _get_effective_prompts() -> Tuple[str, Dict[int, str]]:
     """
     Load effective prompts (DB overrides merged with defaults).
     Cached for performance.
+
+    Uses dynamic venue config for the default system prompt.
     """
     global _PROMPT_CACHE
     now = time.time()
-    
+
     if now - _PROMPT_CACHE["ts"] < _CACHE_TTL:
         return _PROMPT_CACHE["data"]
 
@@ -533,15 +598,19 @@ def _get_effective_prompts() -> Tuple[str, Dict[int, str]]:
         from backend.workflows.io.database import load_db
         from backend.workflow_email import DB_PATH
 
+        # Build dynamic default prompt with current venue config
+        default_system_prompt = _build_system_prompt()
+
         # Load DB using canonical path
         if not DB_PATH.exists():
-            return UNIVERSAL_SYSTEM_PROMPT, STEP_PROMPTS
+            return default_system_prompt, STEP_PROMPTS
 
         db = load_db(DB_PATH)
         config = db.get("config", {}).get("prompts", {})
-        
-        system_prompt = config.get("system_prompt", UNIVERSAL_SYSTEM_PROMPT)
-        
+
+        # Use DB override if set, otherwise use dynamic venue-aware default
+        system_prompt = config.get("system_prompt") or default_system_prompt
+
         # Merge step prompts
         step_prompts = STEP_PROMPTS.copy()
         stored_steps = config.get("step_prompts", {})
@@ -550,13 +619,13 @@ def _get_effective_prompts() -> Tuple[str, Dict[int, str]]:
                 step_prompts[int(k)] = v
             except ValueError:
                 pass
-                
+
         _PROMPT_CACHE = {
             "ts": now,
             "data": (system_prompt, step_prompts)
         }
         return system_prompt, step_prompts
-        
+
     except Exception as exc:
         logger.warning(f"universal_verbalizer: failed to load prompts config: {exc}")
         # Return fallback (potentially stale cache or hard defaults)

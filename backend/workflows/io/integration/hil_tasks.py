@@ -15,8 +15,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
+from backend.workflows.io.config_store import get_timezone
 
-ZURICH_TZ = ZoneInfo("Europe/Zurich")
+
+def _get_venue_tz() -> ZoneInfo:
+    """Return venue timezone as ZoneInfo from config."""
+    return ZoneInfo(get_timezone())
 
 
 # =============================================================================
@@ -105,7 +109,7 @@ def create_message_approval_task(
             "draft_message": draft_message,
             "subject": subject,
             "recipient_email": client_email,
-            "created_at": datetime.now(ZURICH_TZ).isoformat(),
+            "created_at": datetime.now(_get_venue_tz()).isoformat(),
         },
     }
 
@@ -147,7 +151,7 @@ def create_offer_approval_task(
         "payload": {
             "action": HILAction.APPROVE_OFFER,
             "offer_summary": offer_summary,
-            "created_at": datetime.now(ZURICH_TZ).isoformat(),
+            "created_at": datetime.now(_get_venue_tz()).isoformat(),
         },
     }
 
@@ -189,7 +193,7 @@ def create_date_confirmation_task(
         "payload": {
             "action": HILAction.APPROVE_DATE,
             "proposed_dates": proposed_dates,
-            "created_at": datetime.now(ZURICH_TZ).isoformat(),
+            "created_at": datetime.now(_get_venue_tz()).isoformat(),
         },
     }
 
@@ -240,7 +244,7 @@ def create_room_approval_task(
             "room_name": room_name,
             "room_status": room_status,
             "conflict_info": conflict_info,
-            "created_at": datetime.now(ZURICH_TZ).isoformat(),
+            "created_at": datetime.now(_get_venue_tz()).isoformat(),
         },
     }
 
@@ -285,7 +289,7 @@ def create_manual_review_task(
             "action": HILAction.MANUAL_REVIEW,
             "reason": reason,
             "context": context,
-            "created_at": datetime.now(ZURICH_TZ).isoformat(),
+            "created_at": datetime.now(_get_venue_tz()).isoformat(),
         },
     }
 
@@ -335,7 +339,7 @@ def create_confirmation_task(
             "event_details": event_details,
             "requires_deposit": requires_deposit,
             "deposit_amount": deposit_amount,
-            "created_at": datetime.now(ZURICH_TZ).isoformat(),
+            "created_at": datetime.now(_get_venue_tz()).isoformat(),
         },
     }
 
@@ -403,7 +407,7 @@ def create_ai_reply_approval_task(
             "step_name": step_name,
             "context": context or {},
             "editable": True,  # Manager can edit before approving
-            "created_at": datetime.now(ZURICH_TZ).isoformat(),
+            "created_at": datetime.now(_get_venue_tz()).isoformat(),
         },
     }
 
@@ -424,7 +428,7 @@ def mark_task_completed(task: Dict[str, Any], resolution: str = "approved") -> D
         Updated task record
     """
     task["status"] = "completed"
-    task["completed_at"] = datetime.now(ZURICH_TZ).isoformat()
+    task["completed_at"] = datetime.now(_get_venue_tz()).isoformat()
     if "payload" not in task:
         task["payload"] = {}
     task["payload"]["resolution"] = resolution
@@ -501,5 +505,5 @@ def create_email_record(
         "client_id": client_id,
         "is_sent": is_sent,
         "thread_id": thread_id,
-        "received_at": datetime.now(ZURICH_TZ).isoformat() if not is_sent else None,
+        "received_at": datetime.now(_get_venue_tz()).isoformat() if not is_sent else None,
     }

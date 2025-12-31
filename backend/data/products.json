@@ -7,14 +7,7 @@
       "unit": "per_person",
       "unit_price": 18.0,
       "unavailable_in": [],
-      "synonyms": [
-        "classic apero",
-        "finger food",
-        "finger-food",
-        "standing reception",
-        "cocktail bites",
-        "apero classique"
-      ]
+      "synonyms": ["classic apero", "finger food", "finger-food", "standing reception", "cocktail bites", "apero classique"]
     },
     {
       "id": "catering-premium-apero",
@@ -23,118 +16,7 @@
       "unit": "per_person",
       "unit_price": 28.0,
       "unavailable_in": [],
-      "synonyms": [
-        "premium apero",
-        "gourmet finger food",
-        "finger food deluxe",
-        "standing reception premium",
-        "apero riche"
-      ]
-    },
-    {
-      "id": "beverage-prosecco",
-      "name": "Prosecco Service",
-      "category": "Beverages",
-      "unit": "per_bottle",
-      "unit_price": 35.0,
-      "unavailable_in": [
-        "atelier-room-a"
-      ],
-      "synonyms": [
-        "prosecco",
-        "sparkling wine",
-        "bubbly",
-        "prosecco bar"
-      ]
-    },
-    {
-      "id": "beverage-coffee-bar",
-      "name": "Coffee & Tea Bar",
-      "category": "Beverages",
-      "unit": "per_person",
-      "unit_price": 7.5,
-      "unavailable_in": [],
-      "synonyms": [
-        "coffee service",
-        "coffee bar",
-        "coffee & tea",
-        "coffee station",
-        "beverage station"
-      ]
-    },
-    {
-      "id": "equipment-hybrid-kit",
-      "name": "Hybrid Streaming Kit",
-      "category": "Equipment",
-      "unit": "per_event",
-      "unit_price": 420.0,
-      "unavailable_in": [
-        "atelier-room-d"
-      ],
-      "synonyms": [
-        "hybrid streaming",
-        "streaming kit",
-        "video conference",
-        "hybrid setup"
-      ]
-    },
-    {
-      "id": "equipment-wireless-mics",
-      "name": "Wireless Microphone",
-      "category": "Equipment",
-      "unit": "per_unit",
-      "unit_price": 25.0,
-      "unavailable_in": [],
-      "synonyms": [
-        "wireless mic",
-        "handheld mic",
-        "cordless microphone"
-      ]
-    },
-    {
-      "id": "equipment-projector",
-      "name": "Projector",
-      "category": "Equipment",
-      "unit": "per_event",
-      "unit_price": 75.0,
-      "unavailable_in": [],
-      "synonyms": [
-        "beamer",
-        "projection",
-        "projection screen",
-        "video projector"
-      ]
-    },
-    {
-      "id": "beverage-cocktail-bar",
-      "name": "Cocktail Bar Setup",
-      "category": "Beverages",
-      "unit": "per_event",
-      "unit_price": 320.0,
-      "unavailable_in": [],
-      "synonyms": [
-        "cocktail setup",
-        "cocktail bar",
-        "mixology station",
-        "bar area",
-        "signature cocktails"
-      ]
-    },
-    {
-      "id": "entertainment-background-music",
-      "name": "Background Music Package",
-      "category": "Entertainment",
-      "unit": "per_event",
-      "unit_price": 180.0,
-      "unavailable_in": [],
-      "synonyms": [
-        "background music",
-        "ambient music",
-        "music package",
-        "sound system",
-        "dj set",
-        "music playlist"
-      ]
+      "synonyms": ["premium apero", "gourmet finger food", "finger food deluxe", "standing reception premium", "apero riche"]
     },
     {
       "id": "catering-basic-coffee",
@@ -143,15 +25,9 @@
       "unit": "per_person",
       "unit_price": 8.5,
       "unavailable_in": [],
-      "synonyms": [],
+      "synonyms": ["coffee break", "tea service", "hot beverages"],
       "description": "Perfect for short meetings",
-      "includes": [
-        "Freshly brewed coffee (regular & decaf)",
-        "Selection of teas (black, green, herbal)",
-        "Still & sparkling water",
-        "Sugar, milk, honey"
-      ],
-      "dietary_options": []
+      "includes": ["Freshly brewed coffee (regular & decaf)", "Selection of teas", "Still & sparkling water", "Sugar, milk, honey"]
     },
     {
       "id": "catering-coffee-snacks",
@@ -160,15 +36,31 @@
       "unit": "per_person",
       "unit_price": 15.0,
       "unavailable_in": [],
-      "synonyms": [],
+      "synonyms": ["coffee break deluxe", "morning break", "afternoon break"],
       "description": "Ideal for half-day workshops",
-      "includes": [
-        "Everything from Basic Package",
-        "Fresh croissants & pastries",
-        "Seasonal fruit platter",
-        "Small cookies"
-      ],
-      "dietary_options": []
+      "includes": ["Everything from Basic Package", "Fresh croissants & pastries", "Seasonal fruit platter", "Small cookies"]
+    },
+    {
+      "id": "catering-breakfast-continental",
+      "name": "Continental Breakfast",
+      "category": "Catering",
+      "unit": "per_person",
+      "unit_price": 22.0,
+      "unavailable_in": [],
+      "synonyms": ["breakfast", "morning meal", "frühstück"],
+      "description": "Classic European breakfast",
+      "includes": ["Fresh pastries & breads", "Butter & jam selection", "Muesli & yogurt", "Fresh fruit", "Coffee, tea & juices"]
+    },
+    {
+      "id": "catering-breakfast-full",
+      "name": "Full Breakfast Buffet",
+      "category": "Catering",
+      "unit": "per_person",
+      "unit_price": 32.0,
+      "unavailable_in": [],
+      "synonyms": ["brunch", "hot breakfast", "english breakfast"],
+      "description": "Complete hot & cold breakfast",
+      "includes": ["Continental items", "Scrambled eggs", "Bacon & sausages", "Hash browns", "Smoked salmon", "Cheese platter"]
     },
     {
       "id": "catering-lunch-package",
@@ -177,20 +69,10 @@
       "unit": "per_person",
       "unit_price": 28.0,
       "unavailable_in": [],
-      "synonyms": [],
+      "synonyms": ["lunch", "midday meal", "mittagessen"],
       "description": "Full lunch service",
-      "includes": [
-        "Main course (choice of 2 options)",
-        "Fresh salad bar",
-        "Bread basket",
-        "Dessert",
-        "Coffee & tea"
-      ],
-      "dietary_options": [
-        "Vegetarian",
-        "Vegan",
-        "Gluten-free available"
-      ]
+      "includes": ["Main course (choice of 2 options)", "Fresh salad bar", "Bread basket", "Dessert", "Coffee & tea"],
+      "dietary_options": ["Vegetarian", "Vegan", "Gluten-free available"]
     },
     {
       "id": "catering-premium-lunch",
@@ -199,18 +81,65 @@
       "unit": "per_person",
       "unit_price": 42.0,
       "unavailable_in": [],
-      "synonyms": [],
+      "synonyms": ["executive lunch", "business lunch", "gourmet lunch"],
       "description": "Elevated dining experience",
-      "includes": [
-        "Three-course meal",
-        "Premium salad bar with international options",
-        "Choice of 3 main courses",
-        "Gourmet dessert selection",
-        "Coffee, tea & soft drinks included"
-      ],
-      "dietary_options": [
-        "All dietary requirements accommodated"
-      ]
+      "includes": ["Three-course meal", "Premium salad bar", "Choice of 3 main courses", "Gourmet dessert selection", "Coffee, tea & soft drinks"],
+      "dietary_options": ["All dietary requirements accommodated"]
+    },
+    {
+      "id": "catering-dinner-3course",
+      "name": "Three-Course Dinner",
+      "category": "Catering",
+      "unit": "per_person",
+      "unit_price": 58.0,
+      "unavailable_in": [],
+      "synonyms": ["dinner", "evening meal", "gala dinner", "abendessen"],
+      "description": "Elegant seated dinner",
+      "includes": ["Amuse-bouche", "Starter", "Main course", "Dessert", "Coffee & petits fours"]
+    },
+    {
+      "id": "catering-dinner-4course",
+      "name": "Four-Course Gala Dinner",
+      "category": "Catering",
+      "unit": "per_person",
+      "unit_price": 78.0,
+      "unavailable_in": [],
+      "synonyms": ["gala", "banquet", "festive dinner", "formal dinner"],
+      "description": "Premium gala experience",
+      "includes": ["Amuse-bouche", "Starter", "Fish or sorbet intermezzo", "Main course", "Cheese course", "Dessert trio"]
+    },
+    {
+      "id": "catering-bbq-package",
+      "name": "BBQ Package",
+      "category": "Catering",
+      "unit": "per_person",
+      "unit_price": 45.0,
+      "unavailable_in": ["atelier-room-a"],
+      "synonyms": ["barbecue", "grill", "outdoor catering", "summer party"],
+      "description": "Casual outdoor grilling",
+      "includes": ["Grilled meats selection", "Vegetarian options", "Salad bar", "Grilled vegetables", "Sauces & condiments", "Dessert"]
+    },
+    {
+      "id": "catering-sushi-station",
+      "name": "Sushi Station",
+      "category": "Catering",
+      "unit": "per_person",
+      "unit_price": 38.0,
+      "unavailable_in": [],
+      "synonyms": ["sushi", "japanese", "asian food station", "sushi bar"],
+      "description": "Live sushi preparation",
+      "includes": ["Assorted nigiri", "Maki rolls", "Sashimi selection", "Edamame", "Miso soup"]
+    },
+    {
+      "id": "catering-pasta-station",
+      "name": "Live Pasta Station",
+      "category": "Catering",
+      "unit": "per_person",
+      "unit_price": 26.0,
+      "unavailable_in": [],
+      "synonyms": ["pasta bar", "italian station", "pasta live cooking"],
+      "description": "Fresh pasta made to order",
+      "includes": ["3 pasta varieties", "4 sauce options", "Parmesan & toppings", "Garlic bread"]
     },
     {
       "id": "catering-apero",
@@ -219,31 +148,99 @@
       "unit": "per_person",
       "unit_price": 24.0,
       "unavailable_in": [],
-      "synonyms": [],
+      "synonyms": ["networking reception", "drinks reception", "cocktail hour"],
       "description": "Perfect for networking events",
-      "includes": [
-        "Selection of canapés (6 pieces per person)",
-        "Cheese & charcuterie platter",
-        "Vegetable crudités with dips",
-        "Olives & nuts",
-        "Soft drinks & juice"
-      ],
-      "dietary_options": []
+      "includes": ["Selection of canapés (6 pieces)", "Cheese & charcuterie", "Vegetable crudités", "Olives & nuts", "Soft drinks & juice"]
+    },
+    {
+      "id": "catering-vegetarian-menu",
+      "name": "Vegetarian Menu",
+      "category": "Catering",
+      "unit": "per_person",
+      "unit_price": 48.0,
+      "unavailable_in": [],
+      "synonyms": ["veggie menu", "meat-free", "vegetarisch"],
+      "description": "Plant-based gourmet experience",
+      "includes": ["Three-course vegetarian meal", "Seasonal vegetables", "Artisan breads", "Dessert"]
+    },
+    {
+      "id": "catering-vegan-menu",
+      "name": "Vegan Menu",
+      "category": "Catering",
+      "unit": "per_person",
+      "unit_price": 52.0,
+      "unavailable_in": [],
+      "synonyms": ["plant-based", "dairy-free", "vegan dinner"],
+      "description": "100% plant-based cuisine",
+      "includes": ["Three-course vegan meal", "Plant-based proteins", "Fresh seasonal produce", "Vegan dessert"]
+    },
+    {
+      "id": "catering-halal-menu",
+      "name": "Halal Menu",
+      "category": "Catering",
+      "unit": "per_person",
+      "unit_price": 55.0,
+      "unavailable_in": [],
+      "synonyms": ["halal", "islamic dietary", "halal certified"],
+      "description": "Certified halal cuisine",
+      "includes": ["Halal-certified meats", "Three-course meal", "No alcohol in preparation"]
+    },
+    {
+      "id": "beverage-coffee-bar",
+      "name": "Coffee & Tea Bar",
+      "category": "Beverages",
+      "unit": "per_person",
+      "unit_price": 7.5,
+      "unavailable_in": [],
+      "synonyms": ["coffee service", "coffee bar", "coffee & tea", "coffee station", "beverage station"]
+    },
+    {
+      "id": "beverage-prosecco",
+      "name": "Prosecco Service",
+      "category": "Beverages",
+      "unit": "per_bottle",
+      "unit_price": 35.0,
+      "unavailable_in": ["atelier-room-a"],
+      "synonyms": ["prosecco", "sparkling wine", "bubbly", "prosecco bar"]
+    },
+    {
+      "id": "beverage-champagne",
+      "name": "Champagne Service",
+      "category": "Beverages",
+      "unit": "per_bottle",
+      "unit_price": 85.0,
+      "unavailable_in": [],
+      "synonyms": ["champagne", "moet", "veuve clicquot", "bubbly premium"]
+    },
+    {
+      "id": "beverage-cocktail-bar",
+      "name": "Cocktail Bar Setup",
+      "category": "Beverages",
+      "unit": "per_event",
+      "unit_price": 320.0,
+      "unavailable_in": [],
+      "synonyms": ["cocktail setup", "cocktail bar", "mixology station", "bar area", "signature cocktails"]
+    },
+    {
+      "id": "beverage-open-bar",
+      "name": "Open Bar Package",
+      "category": "Beverages",
+      "unit": "per_person",
+      "unit_price": 45.0,
+      "unavailable_in": [],
+      "synonyms": ["free bar", "unlimited drinks", "all-inclusive bar"],
+      "description": "3-hour unlimited drinks",
+      "includes": ["Beer & wine", "Spirits & cocktails", "Soft drinks", "Professional bartender"]
     },
     {
       "id": "beverage-soft-drinks",
-      "name": "Soft Drinks",
+      "name": "Soft Drinks Package",
       "category": "Beverages",
       "unit": "per_person",
       "unit_price": 4.5,
       "unavailable_in": [],
-      "synonyms": [],
-      "options": [
-        "Coca-Cola",
-        "Sprite",
-        "Fanta",
-        "Rivella"
-      ]
+      "synonyms": ["sodas", "non-alcoholic", "soft drinks"],
+      "options": ["Coca-Cola", "Sprite", "Fanta", "Rivella"]
     },
     {
       "id": "beverage-fresh-juices",
@@ -252,49 +249,340 @@
       "unit": "per_person",
       "unit_price": 5.0,
       "unavailable_in": [],
-      "synonyms": [],
-      "options": [
-        "Orange",
-        "Apple",
-        "Mixed berry"
-      ]
+      "synonyms": ["juice bar", "fresh pressed", "smoothies"],
+      "options": ["Orange", "Apple", "Mixed berry", "Green detox"]
     },
     {
-      "id": "beverage-still-and-sparkling-water",
+      "id": "beverage-still-sparkling-water",
       "name": "Still & Sparkling Water",
       "category": "Beverages",
       "unit": "per_person",
       "unit_price": 3.5,
       "unavailable_in": [],
-      "synonyms": [],
-      "options": []
+      "synonyms": ["water service", "mineral water", "wasser"]
     },
     {
       "id": "beverage-wine-selection",
       "name": "Wine Selection",
       "category": "Beverages",
-      "unit": "per_glass",
-      "unit_price": 8.0,
+      "unit": "per_bottle",
+      "unit_price": 42.0,
       "unavailable_in": [],
-      "synonyms": [],
-      "options": [
-        "Swiss white wine",
-        "Swiss red wine",
-        "International selection"
-      ]
+      "synonyms": ["house wine", "wine service", "wein"],
+      "options": ["Swiss white wine", "Swiss red wine", "International selection"]
     },
     {
       "id": "beverage-beer-selection",
       "name": "Beer Selection",
       "category": "Beverages",
-      "unit": "per_bottle",
+      "unit": "per_person",
       "unit_price": 6.5,
       "unavailable_in": [],
-      "synonyms": [],
-      "options": [
-        "Swiss lager",
-        "Local craft beer"
-      ]
+      "synonyms": ["beer", "craft beer", "bier"],
+      "options": ["Swiss lager", "Local craft beer", "Wheat beer"]
+    },
+    {
+      "id": "beverage-mocktail-bar",
+      "name": "Mocktail Bar",
+      "category": "Beverages",
+      "unit": "per_event",
+      "unit_price": 180.0,
+      "unavailable_in": [],
+      "synonyms": ["non-alcoholic cocktails", "virgin cocktails", "alcohol-free bar"],
+      "description": "Creative non-alcoholic drinks"
+    },
+    {
+      "id": "equipment-projector",
+      "name": "Projector",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 75.0,
+      "unavailable_in": [],
+      "synonyms": ["beamer", "projection", "projection screen", "video projector"]
+    },
+    {
+      "id": "equipment-screen-large",
+      "name": "Large Projection Screen",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 95.0,
+      "unavailable_in": [],
+      "synonyms": ["big screen", "presentation screen", "leinwand"]
+    },
+    {
+      "id": "equipment-tv-display",
+      "name": "TV Display (65\")",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 120.0,
+      "unavailable_in": [],
+      "synonyms": ["monitor", "flat screen", "display screen", "fernseher"]
+    },
+    {
+      "id": "equipment-wireless-mics",
+      "name": "Wireless Microphone",
+      "category": "Equipment",
+      "unit": "per_unit",
+      "unit_price": 25.0,
+      "unavailable_in": [],
+      "synonyms": ["wireless mic", "handheld mic", "cordless microphone", "mikrofon"]
+    },
+    {
+      "id": "equipment-lapel-mic",
+      "name": "Lapel Microphone",
+      "category": "Equipment",
+      "unit": "per_unit",
+      "unit_price": 35.0,
+      "unavailable_in": [],
+      "synonyms": ["lavalier", "clip-on mic", "ansteckmikrofon"]
+    },
+    {
+      "id": "equipment-headset-mic",
+      "name": "Headset Microphone",
+      "category": "Equipment",
+      "unit": "per_unit",
+      "unit_price": 45.0,
+      "unavailable_in": [],
+      "synonyms": ["headset", "hands-free mic", "presenter mic"]
+    },
+    {
+      "id": "equipment-pa-system",
+      "name": "PA Sound System",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 180.0,
+      "unavailable_in": [],
+      "synonyms": ["sound system", "speakers", "audio system", "lautsprecher"]
+    },
+    {
+      "id": "equipment-hybrid-kit",
+      "name": "Hybrid Streaming Kit",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 420.0,
+      "unavailable_in": ["atelier-room-d"],
+      "synonyms": ["hybrid streaming", "streaming kit", "video conference", "hybrid setup", "zoom setup"]
+    },
+    {
+      "id": "equipment-webcam-hd",
+      "name": "HD Webcam",
+      "category": "Equipment",
+      "unit": "per_unit",
+      "unit_price": 45.0,
+      "unavailable_in": [],
+      "synonyms": ["camera", "video camera", "conference camera"]
+    },
+    {
+      "id": "equipment-recording",
+      "name": "Event Recording Setup",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 280.0,
+      "unavailable_in": [],
+      "synonyms": ["video recording", "aufnahme", "capture"]
+    },
+    {
+      "id": "equipment-flipchart",
+      "name": "Flipchart",
+      "category": "Equipment",
+      "unit": "per_unit",
+      "unit_price": 15.0,
+      "unavailable_in": [],
+      "synonyms": ["flip chart", "whiteboard", "presentation board", "flipchart ständer"]
+    },
+    {
+      "id": "equipment-whiteboard",
+      "name": "Mobile Whiteboard",
+      "category": "Equipment",
+      "unit": "per_unit",
+      "unit_price": 25.0,
+      "unavailable_in": [],
+      "synonyms": ["dry erase board", "marker board", "weisswandtafel"]
+    },
+    {
+      "id": "equipment-lectern",
+      "name": "Lectern/Podium",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 55.0,
+      "unavailable_in": [],
+      "synonyms": ["podium", "speaker stand", "rednerpult"]
+    },
+    {
+      "id": "equipment-stage",
+      "name": "Portable Stage",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 350.0,
+      "unavailable_in": ["atelier-room-a"],
+      "synonyms": ["platform", "raised stage", "bühne"]
+    },
+    {
+      "id": "equipment-stage-lighting",
+      "name": "Stage Lighting Package",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 280.0,
+      "unavailable_in": [],
+      "synonyms": ["spotlights", "event lighting", "bühnenbeleuchtung"]
+    },
+    {
+      "id": "equipment-laser-pointer",
+      "name": "Presenter Remote & Pointer",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 10.0,
+      "unavailable_in": [],
+      "synonyms": ["clicker", "presentation remote", "laser pointer"]
+    },
+    {
+      "id": "equipment-translation",
+      "name": "Simultaneous Translation System",
+      "category": "Equipment",
+      "unit": "per_event",
+      "unit_price": 650.0,
+      "unavailable_in": [],
+      "synonyms": ["interpreter equipment", "translation booth", "dolmetscheranlage"],
+      "description": "Includes headsets for up to 50 guests"
+    },
+    {
+      "id": "service-photographer",
+      "name": "Event Photographer",
+      "category": "Services",
+      "unit": "per_hour",
+      "unit_price": 180.0,
+      "unavailable_in": [],
+      "synonyms": ["photography", "fotograf", "photo service"],
+      "description": "Professional event photography"
+    },
+    {
+      "id": "service-videographer",
+      "name": "Event Videographer",
+      "category": "Services",
+      "unit": "per_hour",
+      "unit_price": 250.0,
+      "unavailable_in": [],
+      "synonyms": ["video production", "filming", "videografie"],
+      "description": "Professional video coverage"
+    },
+    {
+      "id": "service-hostess",
+      "name": "Hostess / Registration Staff",
+      "category": "Services",
+      "unit": "per_hour",
+      "unit_price": 45.0,
+      "unavailable_in": [],
+      "synonyms": ["receptionist", "greeter", "registration desk", "empfang"],
+      "description": "Professional welcome & registration"
+    },
+    {
+      "id": "service-cloakroom",
+      "name": "Cloakroom Service",
+      "category": "Services",
+      "unit": "per_event",
+      "unit_price": 120.0,
+      "unavailable_in": [],
+      "synonyms": ["coat check", "garderobe", "wardrobe"],
+      "description": "Staffed cloakroom for guests"
+    },
+    {
+      "id": "service-valet-parking",
+      "name": "Valet Parking",
+      "category": "Services",
+      "unit": "per_event",
+      "unit_price": 350.0,
+      "unavailable_in": [],
+      "synonyms": ["parking service", "valet", "parkservice"],
+      "description": "Professional valet service"
+    },
+    {
+      "id": "service-security",
+      "name": "Security Staff",
+      "category": "Services",
+      "unit": "per_hour",
+      "unit_price": 55.0,
+      "unavailable_in": [],
+      "synonyms": ["bouncer", "security guard", "sicherheitsdienst"],
+      "description": "Professional security personnel"
+    },
+    {
+      "id": "service-technical-support",
+      "name": "On-Site Technical Support",
+      "category": "Services",
+      "unit": "per_hour",
+      "unit_price": 85.0,
+      "unavailable_in": [],
+      "synonyms": ["tech support", "av technician", "techniker"],
+      "description": "Dedicated AV technician"
+    },
+    {
+      "id": "entertainment-background-music",
+      "name": "Background Music Package",
+      "category": "Entertainment",
+      "unit": "per_event",
+      "unit_price": 180.0,
+      "unavailable_in": [],
+      "synonyms": ["background music", "ambient music", "music package", "sound system", "playlist"]
+    },
+    {
+      "id": "entertainment-dj",
+      "name": "DJ Service",
+      "category": "Entertainment",
+      "unit": "per_event",
+      "unit_price": 650.0,
+      "unavailable_in": [],
+      "synonyms": ["disc jockey", "dj set", "party music"],
+      "description": "Professional DJ for 4 hours"
+    },
+    {
+      "id": "entertainment-live-band",
+      "name": "Live Band",
+      "category": "Entertainment",
+      "unit": "per_event",
+      "unit_price": 2500.0,
+      "unavailable_in": [],
+      "synonyms": ["live music", "band", "musicians", "liveband"],
+      "description": "4-piece band for 3 hours"
+    },
+    {
+      "id": "entertainment-solo-musician",
+      "name": "Solo Musician",
+      "category": "Entertainment",
+      "unit": "per_hour",
+      "unit_price": 220.0,
+      "unavailable_in": [],
+      "synonyms": ["pianist", "guitarist", "jazz musician", "acoustic music"],
+      "description": "Piano, guitar, or violin"
+    },
+    {
+      "id": "entertainment-photo-booth",
+      "name": "Photo Booth",
+      "category": "Entertainment",
+      "unit": "per_event",
+      "unit_price": 450.0,
+      "unavailable_in": [],
+      "synonyms": ["photo box", "selfie station", "fotobox"],
+      "description": "Includes props and instant prints"
+    },
+    {
+      "id": "entertainment-magician",
+      "name": "Close-Up Magician",
+      "category": "Entertainment",
+      "unit": "per_hour",
+      "unit_price": 280.0,
+      "unavailable_in": [],
+      "synonyms": ["magic show", "zauber", "illusionist"],
+      "description": "Table-side entertainment"
+    },
+    {
+      "id": "entertainment-team-building",
+      "name": "Team Building Activity",
+      "category": "Entertainment",
+      "unit": "per_person",
+      "unit_price": 35.0,
+      "unavailable_in": [],
+      "synonyms": ["team event", "group activity", "teambuilding"],
+      "description": "Facilitated team exercises"
     },
     {
       "id": "addon-birthday-cake",
@@ -303,7 +591,7 @@
       "unit": "per_event",
       "unit_price": 65.0,
       "unavailable_in": [],
-      "synonyms": [],
+      "synonyms": ["cake", "celebration cake", "geburtstagskuchen"],
       "description": "Custom cake for celebrations"
     },
     {
@@ -313,7 +601,7 @@
       "unit": "per_event",
       "unit_price": 120.0,
       "unavailable_in": [],
-      "synonyms": [],
+      "synonyms": ["chocolate fondue", "schokoladenbrunnen"],
       "description": "With fresh fruit for dipping"
     },
     {
@@ -323,8 +611,128 @@
       "unit": "per_event",
       "unit_price": 150.0,
       "unavailable_in": [],
-      "synonyms": [],
+      "synonyms": ["coffee artist", "latte art", "kaffee bar"],
       "description": "Professional coffee bar with barista"
+    },
+    {
+      "id": "addon-ice-cream-cart",
+      "name": "Ice Cream Cart",
+      "category": "Add-ons",
+      "unit": "per_event",
+      "unit_price": 180.0,
+      "unavailable_in": [],
+      "synonyms": ["gelato", "ice cream bar", "eiswagen"],
+      "description": "Selection of premium ice creams"
+    },
+    {
+      "id": "addon-candy-bar",
+      "name": "Candy Bar",
+      "category": "Add-ons",
+      "unit": "per_event",
+      "unit_price": 95.0,
+      "unavailable_in": [],
+      "synonyms": ["sweet table", "dessert bar", "süssigkeiten"],
+      "description": "Assorted sweets and candies"
+    },
+    {
+      "id": "addon-cheese-wheel",
+      "name": "Cheese Wheel Station",
+      "category": "Add-ons",
+      "unit": "per_event",
+      "unit_price": 220.0,
+      "unavailable_in": [],
+      "synonyms": ["cheese station", "käse", "fromage"],
+      "description": "Premium Swiss cheese selection"
+    },
+    {
+      "id": "decor-flower-arrangement",
+      "name": "Flower Arrangements",
+      "category": "Decoration",
+      "unit": "per_table",
+      "unit_price": 45.0,
+      "unavailable_in": [],
+      "synonyms": ["flowers", "centerpiece", "blumen", "tischdeko"],
+      "description": "Fresh floral centerpieces"
+    },
+    {
+      "id": "decor-balloon-arch",
+      "name": "Balloon Arch",
+      "category": "Decoration",
+      "unit": "per_event",
+      "unit_price": 180.0,
+      "unavailable_in": [],
+      "synonyms": ["balloons", "balloon decoration", "luftballons"],
+      "description": "Custom balloon installation"
+    },
+    {
+      "id": "decor-led-uplighting",
+      "name": "LED Uplighting",
+      "category": "Decoration",
+      "unit": "per_event",
+      "unit_price": 250.0,
+      "unavailable_in": [],
+      "synonyms": ["ambient lighting", "mood lighting", "color wash"],
+      "description": "Customizable LED accent lighting"
+    },
+    {
+      "id": "decor-table-runner",
+      "name": "Premium Table Runners",
+      "category": "Decoration",
+      "unit": "per_table",
+      "unit_price": 15.0,
+      "unavailable_in": [],
+      "synonyms": ["table decoration", "tischläufer"],
+      "description": "Elegant fabric runners"
+    },
+    {
+      "id": "furniture-cocktail-tables",
+      "name": "Cocktail Tables",
+      "category": "Furniture",
+      "unit": "per_unit",
+      "unit_price": 25.0,
+      "unavailable_in": [],
+      "synonyms": ["standing tables", "high tables", "stehtisch"],
+      "description": "Standing height tables"
+    },
+    {
+      "id": "furniture-lounge-set",
+      "name": "Lounge Furniture Set",
+      "category": "Furniture",
+      "unit": "per_set",
+      "unit_price": 180.0,
+      "unavailable_in": [],
+      "synonyms": ["sofa set", "lounge area", "chill zone"],
+      "description": "Sofa, chairs & coffee table"
+    },
+    {
+      "id": "furniture-outdoor-heaters",
+      "name": "Outdoor Heaters",
+      "category": "Furniture",
+      "unit": "per_unit",
+      "unit_price": 65.0,
+      "unavailable_in": ["atelier-room-a"],
+      "synonyms": ["patio heaters", "terrace heating", "heizpilz"],
+      "description": "For terrace/outdoor areas"
+    },
+    {
+      "id": "furniture-extra-chairs",
+      "name": "Extra Chairs",
+      "category": "Furniture",
+      "unit": "per_unit",
+      "unit_price": 5.0,
+      "unavailable_in": [],
+      "synonyms": ["additional seating", "stühle"],
+      "description": "Standard event chairs"
+    },
+    {
+      "id": "furniture-premium-chairs",
+      "name": "Premium Chiavari Chairs",
+      "category": "Furniture",
+      "unit": "per_unit",
+      "unit_price": 12.0,
+      "unavailable_in": [],
+      "synonyms": ["chiavari", "gold chairs", "wedding chairs"],
+      "description": "Elegant gold or silver chairs"
     }
   ]
 }

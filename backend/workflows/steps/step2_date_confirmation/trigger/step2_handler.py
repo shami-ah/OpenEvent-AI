@@ -5,6 +5,7 @@ import re
 import logging
 
 from backend.domain import TaskStatus, TaskType
+from backend.workflows.io.config_store import get_timezone
 from backend.debug.hooks import (
     set_subloop,
     trace_db_read,
@@ -1720,7 +1721,7 @@ def _finalize_confirmation(
         "end_time": window.end_time,
         "start": window.start_iso,
         "end": window.end_iso,
-        "tz": "Europe/Zurich",
+        "tz": get_timezone(),
         "hash": new_hash,
         "times_inherited": window.inherited_times,
         "source_message_id": window.source_message_id,

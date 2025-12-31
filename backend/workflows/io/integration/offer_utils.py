@@ -17,9 +17,12 @@ from typing import Any, Dict, List, Optional
 
 import pytz
 
+from backend.workflows.io.config_store import get_timezone
 
-# Zurich timezone for consistent date handling
-ZURICH_TZ = pytz.timezone("Europe/Zurich")
+
+def _get_venue_tz() -> pytz.BaseTzInfo:
+    """Return venue timezone from config as pytz timezone."""
+    return pytz.timezone(get_timezone())
 
 
 def generate_offer_number(team_prefix: str = "OE") -> str:
@@ -42,7 +45,7 @@ def generate_offer_number(team_prefix: str = "OE") -> str:
         >>> len(offer_num.split("-"))
         4
     """
-    now = datetime.now(ZURICH_TZ)
+    now = datetime.now(_get_venue_tz())
     short_id = str(uuid.uuid4())[:4].upper()
     return f"{team_prefix}-{now.year}-{now.month:02d}-{short_id}"
 
@@ -80,7 +83,7 @@ def format_date_for_supabase(dt: Optional[date] = None) -> str:
         '2025-02-15'
     """
     if dt is None:
-        dt = datetime.now(ZURICH_TZ).date()
+        dt = datetime.now(_get_venue_tz()).date()
     return dt.strftime("%Y-%m-%d")
 
 
@@ -101,7 +104,7 @@ def calculate_valid_until(
     from datetime import timedelta
 
     if offer_date is None:
-        offer_date = datetime.now(ZURICH_TZ).date()
+        offer_date = datetime.now(_get_venue_tz()).date()
 
     valid_until = offer_date + timedelta(days=validity_days)
     return format_date_for_supabase(valid_until)

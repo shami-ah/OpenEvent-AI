@@ -21,6 +21,7 @@ from backend.detection.pre_filter import pre_filter, PreFilterResult, is_enhance
 from backend.detection.unified import run_unified_detection, UnifiedDetectionResult, is_unified_mode
 from backend.domain import TaskType
 from backend.workflows.io.tasks import enqueue_task
+from backend.workflows.io.config_store import get_manager_names
 
 
 # =============================================================================
@@ -83,9 +84,9 @@ def run_unified_pre_filter(
     if state.event_entry:
         last_message = state.event_entry.get("last_client_message")
 
-    # Get registered manager names if available (for escalation detection)
-    # TODO: Load from client/venue config when available
-    registered_manager_names = None
+    # Get registered manager names from config (for escalation detection)
+    manager_names = get_manager_names()
+    registered_manager_names = manager_names if manager_names else None
 
     # Run the pre-filter (regex only - $0 cost)
     pre_result = pre_filter(

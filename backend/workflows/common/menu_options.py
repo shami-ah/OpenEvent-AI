@@ -35,44 +35,18 @@ _MENU_KEY_PATTERN = re.compile(r"\b(?:menu|menus|menu options)\b")
 _THREE_COURSE_PATTERN = re.compile(r"(?:three|3)[-\s]?course")
 
 
-DINNER_MENU_OPTIONS: Sequence[Dict[str, Any]] = (
-    {
-        "menu_name": "Seasonal Garden Trio",
-        "courses": 3,
-        "vegetarian": True,
-        "wine_pairing": True,
-        "price": "CHF 92",
-        "description": "Charred leek tart, truffle risotto, and citrus pavlova matched with Swiss whites.",
-        "available_months": ["december", "january", "february", "march"],
-        "season_label": "Available December–March",
-        "notes": ["vegetarian"],
-        "priority": 1,
-    },
-    {
-        "menu_name": "Alpine Roots Degustation",
-        "courses": 3,
-        "vegetarian": True,
-        "wine_pairing": True,
-        "price": "CHF 105",
-        "description": "Roasted beet mille-feuille, herb gnocchi, and warm chocolate tart with alpine wine pairing.",
-        "available_months": ["november", "december", "january", "february"],
-        "season_label": "Available November–February",
-        "notes": ["vegetarian"],
-        "priority": 2,
-    },
-    {
-        "menu_name": "Lakeview Signature Journey",
-        "courses": 3,
-        "vegetarian": False,
-        "wine_pairing": True,
-        "price": "CHF 118",
-        "description": "Lake char crudo, veal tenderloin, and Swiss meringue finale with matching wines.",
-        "available_months": ["february", "march", "april"],
-        "season_label": "Available February–April",
-        "notes": ["includes meat & seafood"],
-        "priority": 3,
-    },
-)
+# Database-backed menu options accessor - see config_store.py for defaults
+from backend.workflows.io.config_store import get_dinner_menu_options
+
+
+def _get_dinner_menus() -> Sequence[Dict[str, Any]]:
+    """Load dinner menu options from database config (with fallback defaults)."""
+    return tuple(get_dinner_menu_options())
+
+
+# Legacy constant - now loads from database config
+# Kept for backward compatibility but prefer using _get_dinner_menus() for fresh data
+DINNER_MENU_OPTIONS: Sequence[Dict[str, Any]] = _get_dinner_menus()
 
 
 def _normalize_month(month: Optional[str]) -> Optional[str]:

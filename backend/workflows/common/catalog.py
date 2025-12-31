@@ -119,15 +119,18 @@ def list_room_features(room_id: str) -> List[str]:
     return []
 
 
-_PRODUCT_CATALOG: List[Dict[str, Any]] = [
-    {"name": "Projector & Screen", "category": "av", "rooms": ["Room A", "Room B", "Room C"]},
-    {"name": "Wireless Microphones (pair)", "category": "av", "rooms": ["Room B", "Room C"]},
-    {"name": "Flip Chart Pack", "category": "equipment", "rooms": ["Room A", "Room B", "Room C"]},
-    {"name": "Hybrid Video Kit", "category": "av", "rooms": ["Room B", "Room C"]},
-    {"name": "Stage Lighting Kit", "category": "lighting", "rooms": ["Room C"]},
-    {"name": "Breakout Furniture Set", "category": "furniture", "rooms": ["Room C"]},
-    {"name": "Facilitator Supplies Bundle", "category": "supplies", "rooms": ["Room A", "Room B"]},
-]
+# Database-backed product catalog accessor - see config_store.py for defaults
+from backend.workflows.io.config_store import get_product_room_map
+
+
+def _get_product_catalog() -> List[Dict[str, Any]]:
+    """Load product catalog from database config (with fallback defaults)."""
+    return get_product_room_map()
+
+
+# Legacy constant - now loads from database config
+# Kept for backward compatibility but prefer using _get_product_catalog() for fresh data
+_PRODUCT_CATALOG: List[Dict[str, Any]] = _get_product_catalog()
 
 
 def list_products(

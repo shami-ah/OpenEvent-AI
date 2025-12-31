@@ -15,6 +15,7 @@ from backend.workflows.common.datetime_parse import build_window_iso, parse_firs
 from backend.workflows.common.timeutils import format_iso_date_to_ddmmyyyy
 from backend.workflows.common.relative_dates import resolve_relative_date
 from backend.workflows.common.types import WorkflowState
+from backend.workflows.io.config_store import get_timezone
 
 from .date_parsing import normalize_iso_candidate as _normalize_iso_candidate
 from .step2_utils import (
@@ -191,7 +192,7 @@ def record_confirmation_log(
             "date": window.iso_date,
             "start": window.start_iso,
             "end": window.end_iso,
-            "tz": "Europe/Zurich",
+            "tz": get_timezone(),
         },
         "times_inherited": window.inherited_times,
         "source_message_id": window.source_message_id,

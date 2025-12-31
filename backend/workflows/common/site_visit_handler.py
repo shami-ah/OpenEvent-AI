@@ -38,6 +38,12 @@ from backend.workflows.common.site_visit_state import (
     set_site_visit_date,
     start_site_visit_flow,
 )
+from backend.workflows.io.config_store import (
+    get_site_visit_blocked_dates,
+    get_site_visit_slots,
+    get_site_visit_weekdays_only,
+    get_site_visit_min_days_ahead,
+)
 from backend.workflows.common.types import GroupResult, WorkflowState
 from backend.workflows.io.database import (
     append_audit_entry,
@@ -498,8 +504,9 @@ def _get_blocked_dates(
         except (ValueError, IndexError):
             pass
 
-    # TODO: Also load blocked dates from site_visit_config.blocked_dates
-    # if manager added any manual blocks
+    # Load additional blocked dates from config (holidays, maintenance, etc.)
+    config_blocked = get_site_visit_blocked_dates()
+    blocked.update(config_blocked)
 
     return blocked
 
@@ -539,14 +546,18 @@ def _generate_visit_slots(
     today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     slots: List[str] = []
 
-    # Default time slots (could be loaded from site_visit_config)
-    times = [10, 14, 16]  # Morning, early afternoon, late afternoon
+    # Load time slots from config (morning, early afternoon, late afternoon)
+    times = get_site_visit_slots()
+
+    # Load weekday preference and min days ahead from config
+    weekdays_only = get_site_visit_weekdays_only()
+    min_days_ahead = get_site_visit_min_days_ahead()
 
     # Start from 1 week before event, work backwards
     candidate = event_date - timedelta(days=7)
 
     for _ in range(30):  # Search up to 30 days back
-        if candidate < today + timedelta(days=2):  # At least 2 days ahead
+        if candidate < today + timedelta(days=min_days_ahead):
             candidate -= timedelta(days=1)
             continue
 
@@ -556,8 +567,8 @@ def _generate_visit_slots(
             candidate -= timedelta(days=1)
             continue
 
-        # Only weekdays (could be configurable from site_visit_config)
-        if candidate.weekday() < 5:
+        # Check weekday requirement (configurable)
+        if not weekdays_only or candidate.weekday() < 5:
             for hour in times:
                 slot_dt = candidate.replace(hour=hour, minute=0)
                 slots.append(slot_dt.strftime("%d.%m.%Y at %H:%M"))
@@ -571,10 +582,11 @@ def _generate_visit_slots(
 
     # If no slots found before event, try after today
     if not slots:
-        candidate = today + timedelta(days=3)
+        candidate = today + timedelta(days=min_days_ahead + 1)
         for _ in range(30):
             candidate_iso = candidate.date().isoformat()
-            if candidate_iso not in blocked_dates and candidate.weekday() < 5:
+            is_valid_day = not weekdays_only or candidate.weekday() < 5
+            if candidate_iso not in blocked_dates and is_valid_day:
                 for hour in times:
                     slot_dt = candidate.replace(hour=hour, minute=0)
                     slots.append(slot_dt.strftime("%d.%m.%Y at %H:%M"))

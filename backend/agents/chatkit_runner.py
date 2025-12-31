@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from backend.agents.guardrails import safe_envelope
 from backend.agents.openevent_agent import OpenEventAgent
+from backend.workflows.io.config_store import get_venue_name
 from backend.utils.openai_key import SECRET_NAME, load_openai_api_key
 from backend.agents.tools.dates import (
     SuggestDatesInput,
@@ -781,8 +782,9 @@ async def run_streamed(thread_id: str, message: Dict[str, Any], state: Dict[str,
         client = OpenAI(api_key=api_key)
         allowed_tools = [{"type": "function", "function": {"name": tool}} for tool in policy.allowed_tools]
         stop_tools = [{"type": "function", "function": {"name": tool}} for tool in CLIENT_STOP_AT_TOOLS]
+        venue_name = get_venue_name()
         system_instructions = (
-            "You are OpenEvent's professional event manager for The Atelier. Follow Workflow v3 strictly.\n"
+            f"You are OpenEvent's professional event manager for {venue_name}. Follow Workflow v3 strictly.\n"
             f"Current step: {state.get('current_step') or 'unknown'}; "
             f"Status: {state.get('status') or 'Lead'}.\n"
             "Communicate concisely and professionally. No marketing fluff.\n"

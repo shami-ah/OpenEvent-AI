@@ -5,10 +5,19 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from backend.adapters.calendar_adapter import get_calendar_adapter
 from backend.services.rooms import get_room
+from backend.workflows.io.config_store import get_timezone, get_operating_hours
 
-DEFAULT_TIMEZONE = "Europe/Zurich"
-OPERATING_START_HOUR = 8
-OPERATING_END_HOUR = 23  # exclusive upper bound
+# Dynamic venue configuration (fetched from database)
+def _get_default_timezone() -> str:
+    return get_timezone()
+
+def _get_operating_hours() -> Tuple[int, int]:
+    return get_operating_hours()
+
+# Legacy constants for backward compatibility (use functions for dynamic values)
+DEFAULT_TIMEZONE = "Europe/Zurich"  # Use _get_default_timezone() instead
+OPERATING_START_HOUR = 8  # Use _get_operating_hours() instead
+OPERATING_END_HOUR = 23
 
 
 def parse_time_label(label: Optional[str]) -> Optional[time]:
@@ -38,7 +47,7 @@ def validate_window(
     start_time: Optional[str],
     end_time: Optional[str],
     *,
-    tz: str = DEFAULT_TIMEZONE,
+    tz: Optional[str] = None,
     reference: Optional[date] = None,
 ) -> Tuple[bool, Optional[str]]:
     if not date_iso:
@@ -56,8 +65,10 @@ def validate_window(
     if start and end:
         if start >= end:
             return False, "The end time needs to be after the start time. Happy to adjust the window."
-        if start.hour < OPERATING_START_HOUR or (end.hour >= OPERATING_END_HOUR and end.minute > 0):
-            return False, "We host events between 08:00 and 23:00. Let me share some evening slots that work well."
+        # Use dynamic operating hours from config
+        op_start, op_end = _get_operating_hours()
+        if start.hour < op_start or (end.hour >= op_end and end.minute > 0):
+            return False, f"We host events between {op_start:02d}:00 and {op_end:02d}:00. Let me share some evening slots that work well."
     return True, None
 
 
