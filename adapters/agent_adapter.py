@@ -426,26 +426,25 @@ class OpenAIAgentAdapter(AgentAdapter):
 
     def __init__(self) -> None:
         self._client = get_openai_client()
-        # TODO: Consider changing default from o3-mini to gpt-4o-mini
-        # o3-mini is a reasoning model that sometimes returns malformed JSON
-        # gpt-4o-mini is 7x cheaper and more reliable for JSON extraction
-        # Need to verify gpt-4o-mini reliability before switching default
-        model = os.getenv("OPENAI_AGENT_MODEL", "o3-mini")
+        model = os.getenv("OPENAI_AGENT_MODEL", "gpt-4o-mini")
         self._intent_model = os.getenv("OPENAI_INTENT_MODEL", model)
         self._entity_model = os.getenv("OPENAI_ENTITY_MODEL", model)
         self._fallback = StubAgentAdapter()
 
     def _run_completion(self, *, prompt: str, body: str, subject: str, model: str) -> Dict[str, Any]:
         message = f"Subject: {subject}\n\nBody:\n{body}"
-        response = self._client.chat.completions.create(
-            model=model,
-            messages=[
+        kwargs: Dict[str, Any] = {
+            "model": model,
+            "messages": [
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": message},
             ],
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
+            "response_format": {"type": "json_object"},
+        }
+        # o-series models (o1, o3-mini, etc.) don't support temperature parameter
+        if not model.startswith("o"):
+            kwargs["temperature"] = 0
+        response = self._client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content if response.choices else "{}"
         try:
             return json.loads(content or "{}")
