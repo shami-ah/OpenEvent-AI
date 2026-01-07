@@ -3,7 +3,8 @@ name: Workflow Tests
 on:
   push:
     branches:
-      - work
+      - main
+      - feature/*
   pull_request:
 
 jobs:
@@ -12,6 +13,7 @@ jobs:
     env:
       TZ: Europe/Zurich
       PYTHONHASHSEED: "1337"
+      AGENT_MODE: stub
     steps:
       - uses: actions/checkout@v4
 
@@ -23,15 +25,22 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
       - name: Contract drift check
         run: |
           python - <<'PY'
           import importlib
-          m = importlib.import_module('backend.main')
+          m = importlib.import_module('main')
           assert m is not None
           PY
 
-      - name: Run tests
-        run: pytest
+      - name: Run smoke tests
+        run: pytest tests/smoke -v
+
+      - name: Run regression tests
+        run: pytest tests/regression -v
+
+      - name: Run detection tests
+        run: pytest tests/detection -v -q
