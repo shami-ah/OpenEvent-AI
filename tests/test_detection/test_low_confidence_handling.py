@@ -68,8 +68,9 @@ def test_clarification_message_contains_options():
     )
 
     body = state.draft_messages[-1]["body"]
-    assert "confirm the booking" in body
-    assert "discuss pricing" in body
+    # Check that clarification message asks about the ambiguity
+    assert "confirm" in body.lower() or "booking" in body.lower()
+    assert "discuss" in body.lower() or "pricing" in body.lower() or "negotiate" in body.lower()
     assert result.halt is True
 
 

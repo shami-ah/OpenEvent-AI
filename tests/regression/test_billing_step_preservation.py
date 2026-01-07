@@ -65,7 +65,7 @@ class TestBillingStepPreservation:
         mock_guard_snapshot.candidate_dates = []
 
         with patch(
-            "backend.workflows.runtime.pre_route.evaluate_guards",
+            "workflows.runtime.pre_route.evaluate_guards",
             return_value=mock_guard_snapshot,
         ):
             # Act: Evaluate guards
@@ -101,7 +101,7 @@ class TestBillingStepPreservation:
         mock_guard_snapshot.candidate_dates = []
 
         with patch(
-            "backend.workflows.runtime.pre_route.evaluate_guards",
+            "workflows.runtime.pre_route.evaluate_guards",
             return_value=mock_guard_snapshot,
         ):
             # Act: Evaluate guards
@@ -139,7 +139,7 @@ class TestBillingStepPreservation:
         mock_guard_snapshot.candidate_dates = []
 
         with patch(
-            "backend.workflows.runtime.pre_route.evaluate_guards",
+            "workflows.runtime.pre_route.evaluate_guards",
             return_value=mock_guard_snapshot,
         ):
             # Act: Evaluate guards
