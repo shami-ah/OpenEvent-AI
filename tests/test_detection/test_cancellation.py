@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.detection.special.cancellation import (
+from detection.special.cancellation import (
     detect_cancellation_intent,
     format_cancellation_subject,
 )

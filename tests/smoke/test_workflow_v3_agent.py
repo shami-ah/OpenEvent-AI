@@ -2,6 +2,8 @@
 
 import pytest
 
+pytestmark = pytest.mark.v4
+
 from llm.client import get_openai_client, is_llm_available
 
 

@@ -10,7 +10,7 @@ import pytest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from backend.workflows.common.time_window import TimeWindow, windows_overlap
+from workflows.common.time_window import TimeWindow, windows_overlap
 
 
 class TestTimeWindowOverlap:
@@ -356,7 +356,7 @@ class TestSiteVisitTimeAwareOverlap:
 
     def test_site_visit_no_conflict_different_times(self):
         """Site visit 10:00-11:00 vs event 14:00-16:00 = NO conflict."""
-        from backend.workflows.io.database import get_site_visits_on_date
+        from workflows.io.database import get_site_visits_on_date
 
         db = {
             "events": [
@@ -379,7 +379,7 @@ class TestSiteVisitTimeAwareOverlap:
 
     def test_site_visit_conflict_overlapping_times(self):
         """Site visit 10:00-11:00 vs event 10:30-12:00 = CONFLICT."""
-        from backend.workflows.io.database import get_site_visits_on_date
+        from workflows.io.database import get_site_visits_on_date
 
         db = {
             "events": [
@@ -403,7 +403,7 @@ class TestSiteVisitTimeAwareOverlap:
 
     def test_site_visit_no_time_slot_blocks_all_day(self):
         """Site visit without time_slot blocks any time on that day."""
-        from backend.workflows.io.database import get_site_visits_on_date
+        from workflows.io.database import get_site_visits_on_date
 
         db = {
             "events": [
@@ -426,7 +426,7 @@ class TestSiteVisitTimeAwareOverlap:
 
     def test_site_visit_backward_compatibility_no_times(self):
         """Without query times, uses date-only comparison (backward compat)."""
-        from backend.workflows.io.database import get_site_visits_on_date
+        from workflows.io.database import get_site_visits_on_date
 
         db = {
             "events": [
@@ -451,7 +451,7 @@ class TestSiteVisitTimeAwareOverlap:
 
     def test_site_visit_adjacent_times_no_conflict(self):
         """Site visit 10:00-11:00 vs event 11:00-12:00 = NO conflict (adjacent)."""
-        from backend.workflows.io.database import get_site_visits_on_date
+        from workflows.io.database import get_site_visits_on_date
 
         db = {
             "events": [
@@ -555,7 +555,7 @@ class TestRoomConflictNoTimeScenarios:
 
     def test_room_conflict_both_no_times_same_date(self):
         """Two events without times on same day = CONFLICT."""
-        from backend.detection.special.room_conflict import detect_room_conflict
+        from detection.special.room_conflict import detect_room_conflict
 
         db = {
             "events": [
@@ -589,7 +589,7 @@ class TestRoomConflictNoTimeScenarios:
 
     def test_room_conflict_one_timed_one_all_day(self):
         """Timed event vs all-day event on same day = CONFLICT."""
-        from backend.detection.special.room_conflict import detect_room_conflict
+        from detection.special.room_conflict import detect_room_conflict
 
         db = {
             "events": [
@@ -626,7 +626,7 @@ class TestRoomConflictNoTimeScenarios:
 
     def test_room_no_conflict_timed_vs_all_day_different_dates(self):
         """Timed event vs all-day event on different days = NO conflict."""
-        from backend.detection.special.room_conflict import detect_room_conflict
+        from detection.special.room_conflict import detect_room_conflict
 
         db = {
             "events": [
@@ -662,7 +662,7 @@ class TestRoomConflictNoTimeScenarios:
 
     def test_room_no_conflict_same_date_non_overlapping_times(self):
         """Two timed events on same day with no overlap = NO conflict."""
-        from backend.detection.special.room_conflict import detect_room_conflict
+        from detection.special.room_conflict import detect_room_conflict
 
         db = {
             "events": [

@@ -12,6 +12,8 @@ Run these tests to ensure the backend is properly configured before integration 
 from __future__ import annotations
 
 import pytest
+
+pytestmark = pytest.mark.v4
 from types import SimpleNamespace
 from typing import Any, Dict
 

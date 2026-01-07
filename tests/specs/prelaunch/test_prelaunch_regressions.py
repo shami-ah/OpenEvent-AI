@@ -7,19 +7,19 @@ from typing import Optional
 
 import pytest
 
-from backend.detection.unified import run_unified_detection
-from backend.domain import IntentLabel
-from backend.llm.provider_config import validate_hybrid_mode
-from backend.workflows.common.gatekeeper import explain_step7_gate
-from backend.workflows.common.types import IncomingMessage, WorkflowState
-from backend.workflows.planner import maybe_run_smart_shortcuts
-from backend.workflows.runtime.pre_route import check_out_of_context
-from backend.workflows.steps.step1_intake.trigger import step1_handler as step1_intake
-from backend.workflows.steps.step5_negotiation.trigger.step5_handler import _detect_structural_change
-from backend.workflows.steps.step6_transition import process as step6_process
-from backend.workflows.steps.step7_confirmation.trigger.classification import classify_message
-from backend.workflows.steps.step7_confirmation.trigger.step7_handler import process as step7_process
-from backend.workflow_email import _finalize_output
+from detection.unified import run_unified_detection
+from domain import IntentLabel
+from llm.provider_config import validate_hybrid_mode
+from workflows.common.gatekeeper import explain_step7_gate
+from workflows.common.types import IncomingMessage, WorkflowState
+from workflows.planner import maybe_run_smart_shortcuts
+from workflows.runtime.pre_route import check_out_of_context
+from workflows.steps.step1_intake.trigger import step1_handler as step1_intake
+from workflows.steps.step5_negotiation.trigger.step5_handler import _detect_structural_change
+from workflows.steps.step6_transition import process as step6_process
+from workflows.steps.step7_confirmation.trigger.classification import classify_message
+from workflows.steps.step7_confirmation.trigger.step7_handler import process as step7_process
+from workflow_email import _finalize_output
 
 
 def test_step7_yes_should_be_confirm() -> None:
@@ -266,9 +266,9 @@ def test_validate_hybrid_mode_should_fail_when_required_keys_missing(monkeypatch
 
 def test_out_of_context_should_still_persist_step1_updates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Fixed: OOC handler now tags msg_id before returning (Jan 2026)."""
-    from backend.workflow_email import process_msg
-    from backend.workflows.io import database as db_io
-    from backend.detection.unified import UnifiedDetectionResult
+    from workflow_email import process_msg
+    from workflows.io import database as db_io
+    from detection.unified import UnifiedDetectionResult
 
     monkeypatch.setenv("AGENT_MODE", "stub")
     monkeypatch.setenv("DETECTION_MODE", "unified")
@@ -338,8 +338,8 @@ def test_concurrent_process_msg_should_not_lose_updates(tmp_path: Path, monkeypa
     only held during individual load/save operations (last writer wins). Now the lock
     is held for the entire process_msg duration, serializing concurrent access.
     """
-    from backend.workflow_email import process_msg
-    from backend.workflows.io import database as db_io
+    from workflow_email import process_msg
+    from workflows.io import database as db_io
 
     monkeypatch.setenv("AGENT_MODE", "stub")
     monkeypatch.setenv("DETECTION_MODE", "legacy")
@@ -385,9 +385,9 @@ def test_concurrent_process_msg_should_not_lose_updates(tmp_path: Path, monkeypa
 
 def test_step1_can_overwrite_event_date_from_unanchored_date(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Fixed: Guards and step handlers now skip date change detection for deposit payment context (Jan 2026)."""
-    from backend.workflow_email import process_msg
-    from backend.workflows.io import database as db_io
-    from backend.workflows.common.requirements import requirements_hash
+    from workflow_email import process_msg
+    from workflows.io import database as db_io
+    from workflows.common.requirements import requirements_hash
 
     monkeypatch.setenv("AGENT_MODE", "stub")
     monkeypatch.setenv("DETECTION_MODE", "legacy")
@@ -489,5 +489,5 @@ def test_step1_can_overwrite_event_date_from_unanchored_date(monkeypatch: pytest
 ])
 def test_multilingual_acceptance_detection(text: str, expected: bool) -> None:
     """Multilingual confirmation detection supports EN, DE, FR, IT, ES (Jan 2026)."""
-    from backend.workflows.steps.step1_intake.trigger.gate_confirmation import looks_like_offer_acceptance
+    from workflows.steps.step1_intake.trigger.gate_confirmation import looks_like_offer_acceptance
     assert looks_like_offer_acceptance(text) == expected, f"Failed for: {text!r}"
