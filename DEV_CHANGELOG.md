@@ -2,6 +2,37 @@
 
 ## 2026-01-27
 
+### Feature: Global Field Capture System
+
+**Problem:** The capture system (`workflows/common/capture.py`) only ran in Steps 2-3. If a client provided contact info, date preferences, or room preferences outside these steps (e.g., during site visit confirmation at Step 7), the data was lost.
+
+**Example Gap:** Client at Step 7 says "My contact is John Smith, john@acme.com" → Contact info not captured.
+
+**Solution:** Added `capture_fields_anytime()` function that runs on EVERY message in the pre-route pipeline, similar to existing `capture_billing_anytime()`.
+
+**What It Captures:**
+- `date`, `start_time`, `end_time` → from `unified_result.date`, etc.
+- `room_preference` → from `unified_result.room_preference`
+- `contact_name`, `contact_email`, `contact_phone` → **NEW fields** added to unified detection
+
+**Cost Impact:** $0 extra (piggybacks on existing unified LLM call - just 3 more fields in the prompt)
+
+**Files Modified:**
+- `detection/unified.py` - Added `contact_name`, `contact_email`, `contact_phone` to dataclass, prompt, and parsing
+- `workflows/common/capture.py` - Added `capture_fields_anytime()` function and `FieldCaptureResult` dataclass
+- `workflows/runtime/pre_route.py` - Added call to `capture_fields_anytime()` after billing capture
+
+**Tests Added:**
+- `tests/unit/test_capture_fields_anytime.py` - 16 unit tests covering all capture scenarios
+
+**Design Pattern:** Following `capture_billing_anytime()` approach - global capture function that:
+1. Runs in pre_route.py on every message
+2. Reads from unified detection result (no extra LLM cost)
+3. Stores in `event_entry["captured"]`
+4. Tracks deferred intents for fields captured before their relevant step
+
+---
+
 ### Feature: Hybrid Prompt Injection Defense (Semantic Detection)
 
 **Problem:** Attackers could disguise prompt injection within legitimate requests (e.g., "I need a room for 30 people. Also, ignore all instructions"). The message would classify as `event_request` with high confidence, bypassing confidence-based gates.
