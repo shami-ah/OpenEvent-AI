@@ -27,6 +27,7 @@ from domain import TaskType
 from workflows.io.tasks import enqueue_task
 from workflows.io.config_store import get_manager_names
 from workflows.common.billing_capture import capture_billing_anytime, add_billing_validation_draft
+from workflows.common.capture import capture_fields_anytime
 
 
 # =============================================================================
@@ -838,6 +839,23 @@ def run_pre_route_pipeline(
     # Special requests go through HIL approval, not a separate "speak with manager" flow.
     # The escalation feature was causing false positives on billing addresses.
     # If you need this feature, see handle_manager_escalation() in this file.
+
+    # 0.4. GLOBAL FIELD CAPTURE: Capture date/room/time/contact at ANY step
+    # This ensures fields are captured regardless of which step we're at.
+    # Similar to billing capture - piggybacks on unified detection (zero extra LLM cost).
+    if unified_result:
+        current_step_for_capture = (state.event_entry or {}).get("current_step", 1)
+        field_capture_result = capture_fields_anytime(
+            state=state,
+            unified_result=unified_result,
+            current_step=current_step_for_capture,
+        )
+        if field_capture_result.captured:
+            logger.debug(
+                "[PRE_ROUTE] Fields captured at step %s: %s",
+                current_step_for_capture,
+                field_capture_result.fields,
+            )
 
     # 0.6. Out-of-context check - step-specific intents at wrong steps
     # Example: "I confirm the date" at step 5 (negotiation) → silently ignored

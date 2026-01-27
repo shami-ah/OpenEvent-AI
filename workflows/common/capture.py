@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+import logging
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from detection.unified import UnifiedDetectionResult
+
+logger = logging.getLogger(__name__)
 
 from workflows.common.billing import update_billing_details
 from workflows.common.types import WorkflowState
@@ -222,6 +228,134 @@ def capture_user_fields(state: WorkflowState, *, current_step: int, source: Opti
 
     # Keep telemetry deferred intents in sync with entry
     state.telemetry.deferred_intents = list(dict.fromkeys(deferred_intents))
+
+
+# =============================================================================
+# GLOBAL FIELD CAPTURE (capture_fields_anytime)
+# =============================================================================
+
+@dataclass
+class FieldCaptureResult:
+    """Result of global field capture attempt."""
+
+    captured: bool = False
+    fields: List[str] = field(default_factory=list)  # e.g., ["date", "room", "contact_email"]
+    source: str = ""  # "unified_llm" | "already_captured"
+
+
+def capture_fields_anytime(
+    state: WorkflowState,
+    unified_result: Optional["UnifiedDetectionResult"],
+    current_step: int,
+) -> FieldCaptureResult:
+    """
+    Capture date/room/time/contact fields from unified detection at ANY step.
+
+    This is the CENTRAL field capture function called from pre_route.py.
+    It ensures fields are captured regardless of which step we're at.
+
+    Similar to capture_billing_anytime(), this runs on EVERY message and
+    piggybacks on the unified detection LLM call (zero extra cost).
+
+    Args:
+        state: Current workflow state with event_entry
+        unified_result: Result from unified LLM detection
+        current_step: Current workflow step (for deferred intent tracking)
+
+    Returns:
+        FieldCaptureResult with captured flag and field list
+    """
+    if unified_result is None:
+        return FieldCaptureResult(captured=False, source="no_detection")
+
+    event_entry = state.event_entry
+    if not event_entry:
+        return FieldCaptureResult(captured=False, source="no_event")
+
+    # Check if already captured this turn (avoid duplicate processing)
+    turn_capture_key = "fields_captured_this_turn"
+    if state.turn_notes.get(turn_capture_key):
+        return FieldCaptureResult(captured=False, source="already_captured")
+
+    captured_root = event_entry.setdefault("captured", {})
+    sources = event_entry.setdefault("captured_sources", [])
+    deferred_intents = event_entry.setdefault("deferred_intents", [])
+
+    captured_fields: List[str] = []
+
+    # --- Date/Time Fields (Step 2) ---
+    # Guard: Don't capture site_visit_date as event date
+    if unified_result.date and not unified_result.site_visit_date:
+        _set_nested(captured_root, ("date",), unified_result.date)
+        captured_fields.append("date")
+        if "unified:date" not in sources:
+            sources.append("unified:date")
+        if current_step < 2 and "date_confirmation" not in deferred_intents:
+            deferred_intents.append("date_confirmation")
+
+    if unified_result.start_time:
+        _set_nested(captured_root, ("start_time",), unified_result.start_time)
+        captured_fields.append("start_time")
+        if "unified:start_time" not in sources:
+            sources.append("unified:start_time")
+
+    if unified_result.end_time:
+        _set_nested(captured_root, ("end_time",), unified_result.end_time)
+        captured_fields.append("end_time")
+        if "unified:end_time" not in sources:
+            sources.append("unified:end_time")
+
+    # --- Room Preference (Step 3) ---
+    if unified_result.room_preference:
+        _set_nested(captured_root, ("preferred_room",), unified_result.room_preference)
+        captured_fields.append("preferred_room")
+        if "unified:preferred_room" not in sources:
+            sources.append("unified:preferred_room")
+        if current_step < 3 and "room_selection" not in deferred_intents:
+            deferred_intents.append("room_selection")
+
+    # --- Contact Fields (Step 4) ---
+    if unified_result.contact_name:
+        _set_nested(captured_root, ("contact", "name"), unified_result.contact_name)
+        captured_fields.append("contact.name")
+        if "unified:contact.name" not in sources:
+            sources.append("unified:contact.name")
+        if current_step < 4 and "contact_update" not in deferred_intents:
+            deferred_intents.append("contact_update")
+
+    if unified_result.contact_email:
+        _set_nested(captured_root, ("contact", "email"), unified_result.contact_email)
+        captured_fields.append("contact.email")
+        if "unified:contact.email" not in sources:
+            sources.append("unified:contact.email")
+        if current_step < 4 and "contact_update" not in deferred_intents:
+            deferred_intents.append("contact_update")
+
+    if unified_result.contact_phone:
+        _set_nested(captured_root, ("contact", "phone"), unified_result.contact_phone)
+        captured_fields.append("contact.phone")
+        if "unified:contact.phone" not in sources:
+            sources.append("unified:contact.phone")
+        if current_step < 4 and "contact_update" not in deferred_intents:
+            deferred_intents.append("contact_update")
+
+    # Mark turn as processed
+    state.turn_notes[turn_capture_key] = True
+
+    if captured_fields:
+        state.extras["persist"] = True
+        logger.debug(
+            "[FIELD_CAPTURE] Captured at step %s: %s",
+            current_step,
+            captured_fields,
+        )
+        return FieldCaptureResult(
+            captured=True,
+            fields=captured_fields,
+            source="unified_llm",
+        )
+
+    return FieldCaptureResult(captured=False, source="no_fields")
 
 
 def promote_fields(
