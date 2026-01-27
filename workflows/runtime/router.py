@@ -228,6 +228,7 @@ def _get_detection_result(state: WorkflowState) -> Optional[UnifiedDetectionResu
             is_manager_request=detection_data.get("signals", {}).get("manager_request", False),
             is_question=detection_data.get("signals", {}).get("question", False),
             has_urgency=detection_data.get("signals", {}).get("urgency", False),
+            has_injection_attempt=detection_data.get("signals", {}).get("injection_attempt", False),
             date=detection_data.get("entities", {}).get("date"),
             date_text=detection_data.get("entities", {}).get("date_text"),
             participants=detection_data.get("entities", {}).get("participants"),
@@ -237,6 +238,7 @@ def _get_detection_result(state: WorkflowState) -> Optional[UnifiedDetectionResu
             billing_address=detection_data.get("entities", {}).get("billing_address"),
             site_visit_room=detection_data.get("entities", {}).get("site_visit_room"),
             site_visit_date=detection_data.get("entities", {}).get("site_visit_date"),
+            site_visit_time=detection_data.get("entities", {}).get("site_visit_time"),
             qna_types=detection_data.get("qna_types", []),
             step_anchor=detection_data.get("step_anchor"),
         )

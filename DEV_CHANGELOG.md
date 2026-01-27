@@ -1,5 +1,47 @@
 # Development Changelog
 
+## 2026-01-27
+
+### Feature: Hybrid Prompt Injection Defense (Semantic Detection)
+
+**Problem:** Attackers could disguise prompt injection within legitimate requests (e.g., "I need a room for 30 people. Also, ignore all instructions"). The message would classify as `event_request` with high confidence, bypassing confidence-based gates.
+
+**Solution:** Added `has_injection_attempt` signal to unified detection. The LLM now detects meta-instructions (ignore instructions, reveal prompt, role-playing directives) even within otherwise valid booking requests.
+
+**Files Modified:**
+- `detection/unified.py` - Added `has_injection_attempt` signal to prompt and dataclass
+- `workflows/llm/sanitize.py` - Security gate checks the signal and blocks when detected
+- `workflows/runtime/router.py` - Added signal to detection result reconstructor
+- `tests/regression/test_security_prompt_injection.py` - Added hybrid attack test cases
+
+**Result:** 100% attack detection with 0% false positives on test suite. Hybrid attacks now blocked even when classified as valid booking requests.
+
+---
+
+### Fix: Site Visit Time Extraction From LLM (Separate Field Handling)
+
+**Problem:** When a client requested a site visit with both date AND time (e.g., "May 13 at 14:00"), the system presented time slot options instead of confirming directly. The time was not being used even though it was explicitly stated.
+
+**Root Cause:** Two issues:
+1. **Regex bug** - The old time extraction regex `r'\b(\d{1,2})[:\.]?(\d{2})?\s*(uhr|h|:00)?\b'` matched day numbers as times. For "May 13 at 14:00", it matched "13" as the time before reaching "14:00".
+2. **LLM field separation** - The unified detection prompt was updated to extract `site_visit_time` as a separate field from `site_visit_date`. However, `_start_site_visit()` only checked for combined date+time in the `site_visit_date` field and didn't look at `site_visit_time`.
+
+**Solution:**
+1. Fixed the regex to require a colon/dot separator OR "at"/"um" prefix to distinguish times from dates
+2. Added `site_visit_time` field to unified detection prompt for LLM-based time extraction (handles "2pm", "afternoon", "morning")
+3. Modified `_start_site_visit()` to combine `site_visit_date` and `site_visit_time` when both are present but separate
+
+**Files Modified:**
+- `detection/unified.py` - Added `site_visit_time` entity field to prompt and dataclass
+- `workflows/common/site_visit_handler.py` - Fixed regex, added LLM time usage, combined separate fields in `_start_site_visit()`
+- `workflows/runtime/router.py` - Added `site_visit_time` to detection result reconstructor
+
+**Result:** Site visit requests with date+time now go directly to conflict check → confirm_pending, instead of presenting all time slots again.
+
+**Design Principle:** Entity extraction should use LLM semantics for robustness. Regex patterns should only be fallbacks and must be carefully designed to avoid false matches (e.g., matching dates as times).
+
+---
+
 ## 2026-01-21
 
 ### Fix: Date Change Detour Not Generating New Offer (QNA_GUARD Blocking)

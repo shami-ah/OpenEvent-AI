@@ -228,8 +228,14 @@ def _start_site_visit(
     requested_slot: Optional[str] = None
     if detection and detection.site_visit_date:
         date_iso, time_slot = parse_slot_string(detection.site_visit_date)
-        # Only go to conflict check if BOTH date and time were explicitly provided
-        if date_iso and time_slot:
+        # Check if time is in the separate site_visit_time field
+        if date_iso and not time_slot and detection.site_visit_time:
+            # Combine date from site_visit_date with time from site_visit_time
+            time_slot = detection.site_visit_time
+            requested_slot = f"{date_iso} at {time_slot}"
+            logger.info("[SV] Combined date+time from separate fields: %s", requested_slot)
+        elif date_iso and time_slot:
+            # Both were in site_visit_date
             requested_slot = detection.site_visit_date
 
     if requested_slot:
@@ -407,17 +413,20 @@ def _slot_conflict_response(
     slot_list = "\n".join(f"- {slot}" for slot in all_alternatives)
     date_display = requested_date.split(" at ")[0] if " at " in requested_date else requested_date
 
+    # NOTE: This is a SITE VISIT slot conflict, not a room/event conflict.
+    # The date mentioned here is the site visit date, not the main event date.
     if same_day_alternatives:
         body = (
-            f"The {time_slot} slot on {date_display} is already booked, "
-            f"but other times are available that day.\n\n"
-            f"Here are some alternatives:\n\n{slot_list}\n\n"
-            f"Would any of these work for you?"
+            f"The **{time_slot}** site visit slot on **{date_display}** is already reserved "
+            f"by another client, but other times are available that day.\n\n"
+            f"Here are some alternative site visit times:\n\n{slot_list}\n\n"
+            f"Would any of these work for your venue tour?"
         )
     else:
         body = (
-            f"Unfortunately, {requested_date} is already booked for a site visit. "
-            f"Here are some alternative times:\n\n{slot_list}\n\n"
+            f"Unfortunately, the site visit slot on **{requested_date}** is already reserved "
+            f"by another client.\n\n"
+            f"Here are some alternative times for your venue tour:\n\n{slot_list}\n\n"
             f"Would any of these work for you?"
         )
 
@@ -510,11 +519,17 @@ def _handle_date_selection(
         selected_date = _parse_date_selection(message_text, proposed_dates)
 
     if not selected_date:
-        # Try from detection
+        # Try from detection (LLM-extracted)
         if detection and detection.site_visit_date:
-            selected_date, selected_time = parse_slot_string(detection.site_visit_date)
+            selected_date, _ = parse_slot_string(detection.site_visit_date)
+            # Use LLM-extracted time if available (handles "14:00", "2pm", "afternoon")
+            if detection.site_visit_time and not selected_time:
+                selected_time = detection.site_visit_time
         elif detection and detection.date:
             selected_date, _ = parse_slot_string(detection.date)
+            # Also check for time from detection
+            if detection.site_visit_time and not selected_time:
+                selected_time = detection.site_visit_time
 
     if not selected_date:
         # Try extracting from message
@@ -663,13 +678,25 @@ def _parse_date_time_selection(
                 continue
 
     # Try to parse time first, then associate with date
-    time_pattern = r'\b(\d{1,2})[:\.]?(\d{2})?\s*(uhr|h|:00)?\b'
-    time_match = re.search(time_pattern, lowered)
+    # IMPORTANT: Require colon/dot separator to avoid matching day numbers as times
+    # (e.g., "May 13 at 14:00" should extract 14:00, not 13:00)
     extracted_time = None
+
+    # First try: times with explicit separator (14:00, 14.00)
+    time_with_sep_pattern = r'\b(\d{1,2})[:\.](\d{2})\b'
+    time_match = re.search(time_with_sep_pattern, lowered)
     if time_match:
         hour = int(time_match.group(1))
         if 8 <= hour <= 20:  # Reasonable site visit hours
             extracted_time = f"{hour:02d}:00"
+    else:
+        # Fallback: "at N" or "um N" pattern (for "at 14", "um 10 Uhr")
+        time_indicator_pattern = r'(?:at|um)\s+(\d{1,2})\s*(?:uhr|h)?'
+        time_match = re.search(time_indicator_pattern, lowered)
+        if time_match:
+            hour = int(time_match.group(1))
+            if 8 <= hour <= 20:  # Reasonable site visit hours
+                extracted_time = f"{hour:02d}:00"
 
     # Try ordinal selection with time
     ordinals = [
@@ -1122,15 +1149,18 @@ def _get_booked_site_visit_slots(
 ) -> Set[tuple[str, str]]:
     """Get already-booked site visit slots (per-slot availability).
 
-    Returns a set of (date_iso, time_slot) tuples that are already booked.
-    This allows multiple site visits on the same day at different times.
+    Returns a set of (date_iso, time_slot) tuples that are already booked
+    OR pending confirmation. This prevents double-booking when another
+    client is in the process of confirming a slot.
+
+    Includes slots with status: "scheduled" OR "confirm_pending"
 
     Args:
         event_entry: Current event being processed
         db: Optional database dict (if None, loads from file)
 
     Returns:
-        Set of (date_iso, time_slot) tuples that are already booked
+        Set of (date_iso, time_slot) tuples that are booked or pending
     """
     booked_slots: Set[tuple[str, str]] = set()
 
@@ -1140,7 +1170,7 @@ def _get_booked_site_visit_slots(
 
     current_event_id = event_entry.get("event_id")
 
-    # Query all events with scheduled site visits
+    # Query all events with scheduled OR pending site visits
     events = db.get("events", [])
     for event in events:
         # Skip current event
@@ -1149,7 +1179,10 @@ def _get_booked_site_visit_slots(
 
         # Check site visit state
         sv_state = event.get("site_visit_state", {})
-        if sv_state.get("status") == "scheduled":
+        status = sv_state.get("status")
+
+        # Include both scheduled and confirm_pending slots
+        if status == "scheduled":
             date_iso = sv_state.get("date_iso") or sv_state.get("confirmed_date")
             time_slot = sv_state.get("time_slot") or sv_state.get("confirmed_time")
 
@@ -1158,6 +1191,15 @@ def _get_booked_site_visit_slots(
             elif date_iso:
                 # If no time slot, consider the default time slot booked
                 booked_slots.add((date_iso, "10:00"))
+
+        elif status == "confirm_pending":
+            # Also block slots that are pending confirmation
+            pending_slot = sv_state.get("pending_slot")
+            if pending_slot:
+                from workflows.common.site_visit_state import parse_slot_string
+                date_iso, time_slot = parse_slot_string(pending_slot)
+                if date_iso and time_slot:
+                    booked_slots.add((date_iso, time_slot))
 
     return booked_slots
 

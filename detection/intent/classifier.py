@@ -413,7 +413,7 @@ def _is_confirmation_request(text: str) -> bool:
         r"\b(?:please\s+)?confirm\b",  # "please confirm", "confirm"
         r"\bcan\s+(?:you\s+)?(?:please\s+)?confirm\b",  # "can you confirm"
         r"\bcould\s+(?:you\s+)?(?:please\s+)?confirm\b",  # "could you confirm"
-        r"\b(?:please\s+)?book\b",  # "please book"
+        r"\b(?:please\s+)?book\s+(?:it|the\s+room|the\s+venue)\b",  # "please book it"
         r"\blet'?s?\s+(?:go\s+(?:with|for|ahead)|proceed|book)\b",  # "let's go with", "let's proceed"
         r"\bi(?:'d|\s+would)\s+like\s+to\s+(?:book|confirm|proceed)\b",  # "I'd like to book"
     )
@@ -421,10 +421,9 @@ def _is_confirmation_request(text: str) -> bool:
 
 
 def _detect_qna_types(text: str) -> List[str]:
-    if is_action_request(text):
-        return []
-
-    # Filter out acknowledgments - "thanks for the parking info" is not a question
+    # Hybrid support: Don't return early if it's an action or confirmation request.
+    # Instead, we detect Q&A types even if it looks like an action/confirmation.
+    # But we still filter out pure acknowledgments.
     if _is_acknowledgment(text):
         return []
 

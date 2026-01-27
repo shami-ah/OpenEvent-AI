@@ -12,8 +12,7 @@ Usage:
 
 from __future__ import annotations
 
-from datetime import datetime as dt
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from debug.hooks import trace_db_write, trace_state
 from detection.special.room_conflict import ConflictType, detect_conflict_type
@@ -73,58 +72,76 @@ def handle_select_room_action(
 
     event_id = event_entry["event_id"]
 
-    # [SOFT CONFLICT CHECK] Detect if another client has an Option on this room/date
+    # [CONFLICT CHECK] Detect if another client has Option/Confirmed on this room/date
+    # ALL conflicts are handled the same way: block client, create HIL task, manager decides
     chosen_date = date or event_entry.get("chosen_date") or ""
     conflict_type, conflict_info = detect_conflict_type(
         db=state.db,
         event_id=event_id,
         room_id=room,
         event_date=chosen_date,
-        action="select",  # Client is selecting (becoming Option)
+        action="select",
     )
 
-    # Handle soft conflict: create HIL notification but don't block the client
-    soft_conflict_note = ""
-    if conflict_type == ConflictType.SOFT and conflict_info:
-        # Create HIL notification task for manager (NOT blocking)
-        tasks = state.db.setdefault("tasks", {})
-        task_id = f"soft_conflict_{event_id}_{dt.now().strftime('%Y%m%d%H%M%S')}"
-        tasks[task_id] = {
-            "type": "soft_room_conflict_notification",
-            "status": "pending",
-            "created_at": dt.now().isoformat(),
-            "event_id": event_id,
-            "data": {
-                "room_id": room,
-                "event_date": chosen_date,
-                "client_1": {
-                    "event_id": conflict_info.get("conflicting_event_id"),
-                    "email": conflict_info.get("conflicting_client_email"),
-                    "name": conflict_info.get("conflicting_client_name"),
-                    "status": conflict_info.get("status"),
-                },
-                "client_2": {
-                    "event_id": event_id,
-                    "email": event_entry.get("client_email"),
-                    "name": event_entry.get("client_name"),
-                    "status": "Option (new)",
-                },
-            },
-            "description": (
-                f"Soft Conflict: {room} on {chosen_date}\n\n"
-                f"Client 1: {conflict_info.get('conflicting_client_email')} (already {conflict_info.get('status')})\n"
-                f"Client 2: {event_entry.get('client_email')} (newly selecting)\n\n"
-                f"Both clients now have Option status on this room. "
-                f"Monitor and resolve before either tries to confirm."
-            ),
+    # Handle ANY conflict: block client and ask for reason before creating HIL task
+    if conflict_type in (ConflictType.SOFT, ConflictType.HARD) and conflict_info:
+        # Store pending conflict decision - client needs to provide reason or choose alternative
+        event_entry["conflict_pending_decision"] = {
+            "room_id": room,
+            "event_date": chosen_date,
+            "conflict_info": conflict_info,
         }
-        # Mark event with soft conflict flag (for later hard conflict detection)
         event_entry["has_conflict"] = True
         event_entry["conflict_with"] = conflict_info.get("conflicting_event_id")
-        event_entry["conflict_type"] = "soft"
-        event_entry["conflict_task_id"] = task_id
-        # NOTE: Neither client is notified - manager just gets visibility
+        event_entry["conflict_type"] = "pending"
+        update_event_metadata(
+            event_entry,
+            conflict_pending_decision=event_entry["conflict_pending_decision"],
+            has_conflict=True,
+            conflict_type="pending",
+        )
         state.extras["persist"] = True
+
+        # Compose blocking message asking for reason or alternative choice
+        other_status = conflict_info.get("status", "Option")
+        display_date = _format_display_date(chosen_date)
+        body = (
+            f"I should let you know that **{room}** on **{display_date}** already has "
+            f"a provisional reservation ({other_status}) from another client.\n\n"
+            f"I'd recommend choosing a different room or date to avoid any complications. "
+            f"However, if you have a special reason why you really need this specific room "
+            f"(for example, it's a significant celebration), I can send a request to our "
+            f"manager who will review both bookings.\n\n"
+            f"**What would you like to do?**\n"
+            f"- Choose a different room\n"
+            f"- Choose a different date\n"
+            f"- Request manager review (please share your reason)"
+        )
+
+        state.clear_regular_drafts()
+        state.add_draft_message({
+            "body": body,
+            "step": 3,
+            "next_step": "Resolve room conflict",
+            "thread_state": "Awaiting Client",
+            "topic": "room_conflict_blocking",
+            "requires_approval": False,
+        })
+        state.set_thread_state("Awaiting Client")
+
+        return GroupResult(
+            action="room_conflict_detected",
+            payload={
+                "client_id": state.client_id,
+                "event_id": event_id,
+                "room_id": room,
+                "event_date": chosen_date,
+                "conflict_with": conflict_info.get("conflicting_event_id"),
+                "conflict_status": other_status,
+                "draft_messages": state.draft_messages,
+            },
+            halt=True,  # Block further processing until conflict resolved
+        )
 
     update_event_room(
         state.db,

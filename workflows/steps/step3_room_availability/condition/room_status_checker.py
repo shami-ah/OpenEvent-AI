@@ -43,9 +43,10 @@ def room_status_on_date(
         if not stored_room or stored_room.lower() != room_lc:
             continue
         # Use canonical event["status"], fall back to event_data["Status"] for legacy
+        # IMPORTANT: Only Option and Confirmed block rooms. Leads do NOT block.
         normalized = (event.get("status") or data.get("Status") or "").lower()
         if normalized == "confirmed":
             return "Confirmed"
-        if normalized in {"option", "lead"}:
+        if normalized == "option":
             status_found = "Option"
     return status_found
