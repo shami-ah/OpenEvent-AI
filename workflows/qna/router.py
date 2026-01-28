@@ -12,8 +12,9 @@ from workflows.common.catalog import (
     list_products,
     list_room_features,
     list_rooms_by_feature,
+    _room_entries,  # For listing all rooms in Q&A
 )
-from services.qna_readonly import load_room_static
+from workflows.common.conflict import get_available_rooms_on_date
 from workflows.qna.templates import build_info_block, build_next_step_line
 from debug.hooks import trace_qa_enter, trace_qa_exit
 
@@ -42,6 +43,69 @@ def _get_cached_extraction(event_entry: Optional[Dict[str, Any]]) -> Optional[Di
 
 
 _ROOM_NAMES = ("Room A", "Room B", "Room C", "Punkt.Null")
+
+
+def _list_all_rooms_for_qna(
+    min_capacity: Optional[int] = None,
+    event_date: Optional[str] = None,
+    db: Optional[Dict[str, Any]] = None,
+    event_id: Optional[str] = None,
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """
+    List rooms for Q&A responses (e.g., "What rooms do you have available?").
+
+    Returns (rooms, is_date_filtered) tuple:
+    - rooms: List sorted by capacity with name, max_capacity, and key features
+    - is_date_filtered: True if filtered by date availability
+
+    When event_date and db are provided, only returns rooms available on that date.
+    Optionally filters by minimum capacity.
+    """
+    # Get date-available rooms if date and db provided
+    available_on_date: Optional[set] = None
+    if event_date and db and event_id:
+        try:
+            available_rooms = get_available_rooms_on_date(db, event_id, event_date)
+            available_on_date = {r.lower() for r in available_rooms}
+        except (AttributeError, TypeError, KeyError):
+            # Database structure might not support this check
+            pass
+
+    rooms = []
+    for entry in _room_entries():
+        name = entry.get("name")
+        if not name:
+            continue
+
+        # Filter by date availability if we have that info
+        if available_on_date is not None:
+            if name.lower() not in available_on_date:
+                continue
+
+        # Get max capacity
+        max_cap = entry.get("max_capacity")
+        if max_cap is None:
+            # Try to compute from layouts
+            layouts = entry.get("capacity_by_layout") or {}
+            if layouts:
+                max_cap = max(layouts.values())
+
+        # Filter by min capacity if specified
+        if min_capacity is not None and max_cap is not None and max_cap < min_capacity:
+            continue
+
+        # Get features for display
+        features = list(entry.get("features") or [])[:3]  # Top 3 features
+
+        rooms.append({
+            "name": name,
+            "max_capacity": max_cap,
+            "features": features,
+        })
+
+    # Sort by capacity descending (largest rooms first)
+    rooms.sort(key=lambda r: (r["max_capacity"] or 0), reverse=True)
+    return rooms, available_on_date is not None
 # Auto-build feature keywords from room data at import time
 def _build_feature_keywords() -> Dict[str, str]:
     """
@@ -242,6 +306,83 @@ def _extract_feature_tokens(
     return features
 
 
+def _extract_date_from_text(text: str) -> Optional[Tuple[str, str]]:
+    """
+    Extract a date mentioned in message text.
+
+    Returns tuple of (iso_date, display_date) or None if no date found.
+    Handles formats like "March 15th", "15th of March", "15.03", "March 15".
+    """
+    import calendar
+
+    month_names = {name.lower(): i for i, name in enumerate(calendar.month_name) if name}
+    month_abbr = {name.lower(): i for i, name in enumerate(calendar.month_abbr) if name}
+
+    text_lower = text.lower()
+
+    # Pattern: "March 15th" or "March 15"
+    pattern1 = re.compile(r'\b(' + '|'.join(month_names.keys()) + r')\s+(\d{1,2})(?:st|nd|rd|th)?\b', re.IGNORECASE)
+    match = pattern1.search(text_lower)
+    if match:
+        month_name, day_str = match.groups()
+        month = month_names.get(month_name.lower())
+        if month:
+            day = int(day_str)
+            year = datetime.now().year
+            # If date is in the past, use next year
+            try:
+                target = datetime(year, month, day)
+                if target < datetime.now():
+                    year += 1
+                iso_date = f"{year}-{month:02d}-{day:02d}"
+                display_date = f"{day:02d}.{month:02d}.{year}"
+                return iso_date, display_date
+            except ValueError:
+                pass
+
+    # Pattern: "15th of March" or "15 March"
+    pattern2 = re.compile(r'\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(' + '|'.join(month_names.keys()) + r')\b', re.IGNORECASE)
+    match = pattern2.search(text_lower)
+    if match:
+        day_str, month_name = match.groups()
+        month = month_names.get(month_name.lower())
+        if month:
+            day = int(day_str)
+            year = datetime.now().year
+            try:
+                target = datetime(year, month, day)
+                if target < datetime.now():
+                    year += 1
+                iso_date = f"{year}-{month:02d}-{day:02d}"
+                display_date = f"{day:02d}.{month:02d}.{year}"
+                return iso_date, display_date
+            except ValueError:
+                pass
+
+    # Pattern: "15.03" or "15/03" (European format)
+    pattern3 = re.compile(r'\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b')
+    match = pattern3.search(text)
+    if match:
+        day_str, month_str, year_str = match.groups()
+        day = int(day_str)
+        month = int(month_str)
+        year = int(year_str) if year_str else datetime.now().year
+        if year < 100:
+            year += 2000
+        if 1 <= day <= 31 and 1 <= month <= 12:
+            try:
+                target = datetime(year, month, day)
+                if target < datetime.now() and not year_str:
+                    year += 1
+                iso_date = f"{year}-{month:02d}-{day:02d}"
+                display_date = f"{day:02d}.{month:02d}.{year}"
+                return iso_date, display_date
+            except ValueError:
+                pass
+
+    return None
+
+
 def _feature_matches_room(asked: str, room_features: List[str]) -> bool:
     """
     Check if an asked feature matches any room feature.
@@ -357,22 +498,47 @@ def _event_room(event_entry: Optional[Dict[str, Any]]) -> Optional[str]:
 
 
 def _event_date_iso(event_entry: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Get event date in ISO format from various sources in event_entry."""
     if not event_entry:
         return None
+
+    # Source 1: requested_window.date_iso (from time window capture)
     window = event_entry.get("requested_window") or {}
     iso_value = window.get("date_iso")
     if iso_value:
         return iso_value
+
+    # Source 2: chosen_date (confirmed date)
     chosen = event_entry.get("chosen_date")
-    if not chosen:
-        return None
-    # Try multiple date formats
-    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
-        try:
-            parsed = datetime.strptime(chosen, fmt)
-            return parsed.strftime("%Y-%m-%d")
-        except (ValueError, TypeError):
-            continue
+    if chosen:
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+            try:
+                parsed = datetime.strptime(chosen, fmt)
+                return parsed.strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                continue
+
+    # Source 3: captured.date (from global capture or step capture)
+    captured = event_entry.get("captured") or {}
+    captured_date = captured.get("date") or captured.get("event_date")
+    if captured_date:
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+            try:
+                parsed = datetime.strptime(captured_date, fmt)
+                return parsed.strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                continue
+
+    # Source 4: Event Date field (legacy)
+    event_date = event_entry.get("Event Date")
+    if event_date:
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+            try:
+                parsed = datetime.strptime(event_date, fmt)
+                return parsed.strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                continue
+
     return None
 
 
@@ -415,6 +581,7 @@ def _rooms_by_feature_response(
     attendees: Optional[int],
     layout: Optional[str],
     extraction: Optional[Dict[str, Any]] = None,
+    db: Optional[Dict[str, Any]] = None,
 ) -> List[str]:
     requested_room = _extract_requested_room(text)
     feature_tokens = _extract_feature_tokens(text, extraction)
@@ -487,6 +654,69 @@ def _rooms_by_feature_response(
             primary = ", ".join(feature_list[:3])
             info_lines.append(f"{requested_room} includes {primary}.")
 
+    # Fallback: List rooms when asking general availability question
+    # (no specific room, no specific features)
+    if not info_lines and not requested_room and not feature_tokens:
+        # Get event date and ID for date-aware filtering
+        event_date = _event_date_iso(event_entry)
+        event_id = event_entry.get("event_id") if event_entry else None
+
+        # Fallback: Try to extract date from message text if not in event_entry
+        display_date = None
+        if not event_date and text:
+            extracted = _extract_date_from_text(text)
+            if extracted:
+                event_date = extracted[0]  # ISO format
+                display_date = extracted[1]  # Display format
+
+        # Format display date for user-friendly message
+        if event_date and not display_date:
+            try:
+                parsed = datetime.strptime(event_date, "%Y-%m-%d")
+                display_date = parsed.strftime("%d.%m.%Y")
+            except ValueError:
+                display_date = event_date
+
+        # Get rooms, filtered by date availability if possible
+        all_rooms, is_date_filtered = _list_all_rooms_for_qna(
+            min_capacity=attendees,
+            event_date=event_date,
+            db=db,
+            event_id=event_id,
+        )
+
+        if all_rooms:
+            # Date-aware header when we have a date
+            if display_date and is_date_filtered:
+                info_lines.append(f"On {display_date}, we have the following rooms available:")
+            elif display_date:
+                info_lines.append(f"For {display_date}, we have the following rooms:")
+            else:
+                info_lines.append("We have the following rooms available:")
+
+            for room in all_rooms:
+                cap_str = f"up to {room['max_capacity']} guests" if room.get('max_capacity') else ""
+                feat_str = ", ".join(room.get('features', [])[:2])
+                if cap_str and feat_str:
+                    info_lines.append(f"• {room['name']} ({cap_str}) - {feat_str}")
+                elif cap_str:
+                    info_lines.append(f"• {room['name']} ({cap_str})")
+                else:
+                    info_lines.append(f"• {room['name']}")
+        elif display_date and is_date_filtered:
+            # No rooms available on requested date - suggest alternatives
+            info_lines.append(f"Unfortunately, all our rooms are fully booked on {display_date}.")
+            # Get month from date for alternative suggestions
+            try:
+                parsed = datetime.strptime(event_date, "%Y-%m-%d")
+                free_dates = list_free_dates(anchor_month=parsed.month, count=3, db=db)
+                if free_dates:
+                    dates_str = ", ".join(free_dates[:3])
+                    info_lines.append(f"However, we have availability on: {dates_str}")
+            except (ValueError, TypeError):
+                pass  # Skip alternative suggestions if date parsing fails
+
+    # Final fallback if still empty
     if not info_lines:
         info_lines.append("All rooms include Wi-Fi, daylight, and flexible seating.")
 
@@ -521,6 +751,7 @@ def _room_features_response(text: str, event_entry: Optional[Dict[str, Any]]) ->
     ])
 
     # Get full room data including accessibility and rate_inclusions
+    from services.qna_readonly import load_room_static
     room_static = load_room_static(requested_room)
 
     if asks_accessibility:
@@ -594,6 +825,7 @@ def _accessibility_response(text: str, event_entry: Optional[Dict[str, Any]]) ->
             "Our venue is fully accessible with step-free entry, elevators, and accessible bathrooms. Which room would you like details about?",
         ]
 
+    from services.qna_readonly import load_room_static
     room_static = load_room_static(requested_room)
     accessibility = room_static.get("accessibility") or {}
 
@@ -632,6 +864,7 @@ def _rate_inclusions_response(text: str, event_entry: Optional[Dict[str, Any]]) 
             "Room rates typically include WiFi, basic AV equipment, and standard furniture. Which room would you like details about?",
         ]
 
+    from services.qna_readonly import load_room_static
     room_static = load_room_static(requested_room)
     rate_inclusions = room_static.get("rate_inclusions") or []
 
@@ -970,7 +1203,7 @@ def route_general_qna(
             topic = "general_information"
             target_step_idx = resume_step_idx
         elif qna_type == "rooms_by_feature":
-            info_lines = _rooms_by_feature_response(text, active_entry, attendees, layout, extraction)
+            info_lines = _rooms_by_feature_response(text, active_entry, attendees, layout, extraction, db=db)
             topic = "rooms_by_feature"
             target_step_idx = _qna_target_step(qna_type) or resume_step_idx
         elif qna_type == "room_features":
@@ -1152,7 +1385,7 @@ def _route_combined_qna(
     current_step = _current_step(active_entry)
 
     if select_type == "rooms":
-        info_lines = _rooms_by_feature_response(text, active_entry, attendees, layout, extraction)
+        info_lines = _rooms_by_feature_response(text, active_entry, attendees, layout, extraction, db=db)
         topic = "rooms_combined"
     elif select_type == "menus":
         info_lines = _catering_response(text, active_entry)
@@ -1389,7 +1622,7 @@ def generate_hybrid_qna_response(
         elif qna_type == "room_features":
             info_lines = _room_features_response(message_text, event_entry)
         elif qna_type == "rooms_by_feature":
-            info_lines = _rooms_by_feature_response(message_text, event_entry, attendees, layout, extraction)
+            info_lines = _rooms_by_feature_response(message_text, event_entry, attendees, layout, extraction, db=db)
         elif qna_type == "parking_policy":
             info_lines = _parking_response()
         elif qna_type == "pricing_inquiry":

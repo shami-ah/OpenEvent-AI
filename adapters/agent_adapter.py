@@ -450,7 +450,11 @@ class OpenAIAgentAdapter(AgentAdapter):
         subject: str,
         model_name: str,
     ) -> Dict[str, Any]:
-        message = f"Subject: {subject}\n\nBody:\n{body}"
+        # Sanitize user input before LLM processing (defense in depth)
+        from workflows.llm.sanitize import sanitize_email_body, sanitize_email_subject
+        safe_subject = sanitize_email_subject(subject)
+        safe_body = sanitize_email_body(body)
+        message = f"Subject: {safe_subject}\n\nBody:\n{safe_body}"
         kwargs: Dict[str, Any] = {
             "model": model_name,
             "messages": [
@@ -613,8 +617,12 @@ class GeminiAgentAdapter(AgentAdapter):
         model_name: str,
     ) -> Dict[str, Any]:
         from google.genai import types
+        from workflows.llm.sanitize import sanitize_email_body, sanitize_email_subject
 
-        message = f"Subject: {subject}\n\nBody:\n{body}"
+        # Sanitize user input before LLM processing (defense in depth)
+        safe_subject = sanitize_email_subject(subject)
+        safe_body = sanitize_email_body(body)
+        message = f"Subject: {safe_subject}\n\nBody:\n{safe_body}"
 
         response = self._client.models.generate_content(
             model=model_name,

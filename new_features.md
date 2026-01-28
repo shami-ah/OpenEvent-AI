@@ -4,6 +4,16 @@ Ideas collected during development sessions for future implementation.
 
 ---
 
+## Prompt Customization Guardrails (Jan 28, 2026)
+
+**Context:** Need non-technical managers to edit tone/format of replies without changing routing, extraction, or business logic.
+
+**Proposed Solution:** Use existing `/api/config/prompts` + frontend PromptsEditor for system prompt and per-step guidance. Add admin auth guard. If backend runs on Vercel, persist prompt overrides in durable storage (Supabase) rather than `/tmp`. Keep all functional files unchanged (QnA, safety-sandwich, step handlers). See `docs/plans/active/integration/PROMPT_CUSTOMIZATION_GUARDRAILS.md`.
+
+**Files to modify:** `api/routes/config.py`, `ux/universal_verbalizer.py` (defaults only if needed), `atelier-ai-frontend/app/components/admin/PromptsEditor.tsx`, `atelier-ai-frontend/app/admin/prompts/page.tsx`, `docs/plans/active/integration/PROMPT_CUSTOMIZATION_GUARDRAILS.md`.
+
+**Priority:** Medium.
+
 ## Package Layout Normalization + Production Entrypoint Split (Jan 19, 2026)
 
 **Context:** Code lives under top-level `workflows/` and `api/`, but docs use `backend.*` imports; `main.py` includes dev-only side effects at import.

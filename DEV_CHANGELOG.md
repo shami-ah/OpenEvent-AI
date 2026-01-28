@@ -1,5 +1,106 @@
 # Development Changelog
 
+## 2026-01-27
+
+### Feature: Global Field Capture System
+
+**Problem:** The capture system (`workflows/common/capture.py`) only ran in Steps 2-3. If a client provided contact info, date preferences, or room preferences outside these steps (e.g., during site visit confirmation at Step 7), the data was lost.
+
+**Example Gap:** Client at Step 7 says "My contact is John Smith, john@acme.com" → Contact info not captured.
+
+**Solution:** Added `capture_fields_anytime()` function that runs on EVERY message in the pre-route pipeline, similar to existing `capture_billing_anytime()`.
+
+**What It Captures:**
+- `date`, `start_time`, `end_time` → from `unified_result.date`, etc.
+- `room_preference` → from `unified_result.room_preference`
+- `contact_name`, `contact_email`, `contact_phone` → **NEW fields** added to unified detection
+
+**Cost Impact:** $0 extra (piggybacks on existing unified LLM call - just 3 more fields in the prompt)
+
+**Files Modified:**
+- `detection/unified.py` - Added `contact_name`, `contact_email`, `contact_phone` to dataclass, prompt, and parsing
+- `workflows/common/capture.py` - Added `capture_fields_anytime()` function and `FieldCaptureResult` dataclass
+- `workflows/runtime/pre_route.py` - Added call to `capture_fields_anytime()` after billing capture
+
+**Tests Added:**
+- `tests/unit/test_capture_fields_anytime.py` - 16 unit tests covering all capture scenarios
+
+**Design Pattern:** Following `capture_billing_anytime()` approach - global capture function that:
+1. Runs in pre_route.py on every message
+2. Reads from unified detection result (no extra LLM cost)
+3. Stores in `event_entry["captured"]`
+4. Tracks deferred intents for fields captured before their relevant step
+
+---
+
+### Feature: Hybrid Prompt Injection Defense (Semantic Detection)
+
+**Problem:** Attackers could disguise prompt injection within legitimate requests (e.g., "I need a room for 30 people. Also, ignore all instructions"). The message would classify as `event_request` with high confidence, bypassing confidence-based gates.
+
+**Solution:** Added `has_injection_attempt` signal to unified detection. The LLM now detects meta-instructions (ignore instructions, reveal prompt, role-playing directives) even within otherwise valid booking requests.
+
+**Files Modified:**
+- `detection/unified.py` - Added `has_injection_attempt` signal to prompt and dataclass
+- `workflows/llm/sanitize.py` - Security gate checks the signal and blocks when detected
+- `workflows/runtime/router.py` - Added signal to detection result reconstructor
+- `tests/regression/test_security_prompt_injection.py` - Added hybrid attack test cases
+
+**Result:** 100% attack detection with 0% false positives on test suite. Hybrid attacks now blocked even when classified as valid booking requests.
+
+---
+
+### Fix: Site Visit Time Extraction From LLM (Separate Field Handling)
+
+**Problem:** When a client requested a site visit with both date AND time (e.g., "May 13 at 14:00"), the system presented time slot options instead of confirming directly. The time was not being used even though it was explicitly stated.
+
+**Root Cause:** Two issues:
+1. **Regex bug** - The old time extraction regex `r'\b(\d{1,2})[:\.]?(\d{2})?\s*(uhr|h|:00)?\b'` matched day numbers as times. For "May 13 at 14:00", it matched "13" as the time before reaching "14:00".
+2. **LLM field separation** - The unified detection prompt was updated to extract `site_visit_time` as a separate field from `site_visit_date`. However, `_start_site_visit()` only checked for combined date+time in the `site_visit_date` field and didn't look at `site_visit_time`.
+
+**Solution:**
+1. Fixed the regex to require a colon/dot separator OR "at"/"um" prefix to distinguish times from dates
+2. Added `site_visit_time` field to unified detection prompt for LLM-based time extraction (handles "2pm", "afternoon", "morning")
+3. Modified `_start_site_visit()` to combine `site_visit_date` and `site_visit_time` when both are present but separate
+
+**Files Modified:**
+- `detection/unified.py` - Added `site_visit_time` entity field to prompt and dataclass
+- `workflows/common/site_visit_handler.py` - Fixed regex, added LLM time usage, combined separate fields in `_start_site_visit()`
+- `workflows/runtime/router.py` - Added `site_visit_time` to detection result reconstructor
+
+**Result:** Site visit requests with date+time now go directly to conflict check → confirm_pending, instead of presenting all time slots again.
+
+**Design Principle:** Entity extraction should use LLM semantics for robustness. Regex patterns should only be fallbacks and must be carefully designed to avoid false matches (e.g., matching dates as times).
+
+### Fixes: Detection + Change Guards (Hybrid Safe)
+
+- Q&A type detection now allows confirmation + question hybrids; added "coffee breaks" catering keyword and restored availability detection for "can we book it?"
+- Change-propagation Q&A fallback guard expanded with common change idioms (push back, add, klappt/ginge) to avoid missing detours.
+- Room shortcut respects unified `is_question` for single-sentence queries while still allowing hybrid statement + question messages.
+- Lazy-imported `load_room_static` in `workflows/qna/router.py` to avoid circular imports when loading `_extract_anchor`.
+
+**Tests:** `pytest tests/detection -v`
+
+### Fix: QNA_GUARD Blocking Offer on Room Acceptance with Contact Info
+
+**Problem:** Messages like "Room B would be great. Also, you can reach my colleague Sarah at sarah.jones@acme-corp.com or 555-234-5678 for any questions." were being incorrectly treated as "pure Q&A" because:
+1. The phrase "for any questions" triggered `is_question=True` in unified detection
+2. The QNA_GUARD used text-based `_looks_like_offer_acceptance()` which didn't recognize "Room B would be great" as acceptance
+3. This violated the LLM-First Rule from CLAUDE.md
+
+**Solution:** Three changes to Step 4's QNA_GUARD:
+1. **LLM-first acceptance:** Now checks `unified_detection.is_acceptance` FIRST, with text pattern as fallback
+2. **Contact info bypass:** If user provides contact info (name/email/phone extracted), it's NOT pure Q&A
+3. **Debug logging:** Added detailed logging of all QNA_GUARD decision variables
+
+**Files Modified:**
+- `workflows/steps/step4_offer/trigger/step4_handler.py` - LLM-first acceptance, contact info guard, debug logging
+
+**Result:** Room acceptance + contact info messages now correctly generate offers instead of being blocked by the QNA_GUARD.
+
+**Tests:** All 177 regression tests pass, all 98 step4 tests pass.
+
+---
+
 ## 2026-01-21
 
 ### Fix: Date Change Detour Not Generating New Offer (QNA_GUARD Blocking)

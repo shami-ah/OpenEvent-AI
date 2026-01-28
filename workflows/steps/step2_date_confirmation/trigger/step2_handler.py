@@ -410,8 +410,24 @@ def process(state: WorkflowState) -> GroupResult:
 
     # HYBRID FIX: Pre-generate hybrid Q&A response for hybrid messages
     # This will be appended to the workflow response by api/routes/messages.py
+    # BUT: Filter out room-related Q&A types when both date AND time are provided
+    # (because we'll proceed to Step 3 room availability, which answers the room question)
     if has_valid_qna and not classification.get("is_general"):
         qna_types = getattr(unified_detection, "qna_types", []) or []
+        # Room-related types that Step 3's room availability response already covers
+        room_qna_types_to_filter = {
+            "rooms_by_feature", "room_features", "check_availability", "free_dates", "check_capacity"
+        }
+        # Check if time slot is provided in this message (means we'll go to room availability)
+        has_time_in_message = bool(
+            getattr(unified_detection, "start_time", None) or
+            getattr(unified_detection, "end_time", None)
+        )
+        if has_time_in_message:
+            # Will proceed to room availability - filter out redundant room Q&A
+            filtered_qna_types = [t for t in qna_types if t not in room_qna_types_to_filter]
+            logger.debug("[STEP2][HYBRID_QNA] Filtered room Q&A (time provided): %s -> %s", qna_types, filtered_qna_types)
+            qna_types = filtered_qna_types
         if qna_types:
             hybrid_qna_response = generate_hybrid_qna_response(
                 qna_types=qna_types,

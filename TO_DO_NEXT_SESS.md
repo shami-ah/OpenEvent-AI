@@ -16,6 +16,7 @@ This file tracks active implementation goals and planned roadmap items. **Check 
 | :--- | :--- | :--- | :--- |
 | ~~2026-01-23~~ | ~~**Step 1 Handler Refactoring**~~ | ✅ **DONE 2026-01-24** - Reduced step1_handler.py from 1916 → 799 lines (58% reduction). Extracted 3 modules: classification_extraction.py, change_application.py, requirements_fallback.py. See `docs/plans/active/ARCHITECTURE_IMPLEMENTATION_PLAN_2026_01_23.md` and `DEV_CHANGELOG.md` for details. | ~~**High**~~ |
 | 2026-01-21 | **Detour Date Confirmation Regression** | Add/verify Step 2 → Step 3 recheck after date-change confirmation (`tests/specs/dag/test_change_scenarios_e2e.py`) | **High** |
+| 2026-01-28 | **Offer Q&A Refinement** | Refine `ACTIONS_THAT_ANSWER_QNA` logic: only skip Q&A about products for the *currently selected room*. Q&A asking about products on a *different room* should still be answered. Currently blanket-skips all Q&A for `offer_generated`. | **Medium** |
 | 2025-12-24 | **System Resilience** | Handle diverse client inputs (languages, edge cases) | **Urgent** |
 | 2025-12-24 | **Production Stability** | Verified via zero-failure regression runs | **Urgent** |
 | 2025-12-24 | **Circular Bug Elimination** | Audit routing loops and special flow guards | **Urgent** |
