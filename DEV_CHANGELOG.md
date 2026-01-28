@@ -71,6 +71,34 @@
 
 **Design Principle:** Entity extraction should use LLM semantics for robustness. Regex patterns should only be fallbacks and must be carefully designed to avoid false matches (e.g., matching dates as times).
 
+### Fixes: Detection + Change Guards (Hybrid Safe)
+
+- Q&A type detection now allows confirmation + question hybrids; added "coffee breaks" catering keyword and restored availability detection for "can we book it?"
+- Change-propagation Q&A fallback guard expanded with common change idioms (push back, add, klappt/ginge) to avoid missing detours.
+- Room shortcut respects unified `is_question` for single-sentence queries while still allowing hybrid statement + question messages.
+- Lazy-imported `load_room_static` in `workflows/qna/router.py` to avoid circular imports when loading `_extract_anchor`.
+
+**Tests:** `pytest tests/detection -v`
+
+### Fix: QNA_GUARD Blocking Offer on Room Acceptance with Contact Info
+
+**Problem:** Messages like "Room B would be great. Also, you can reach my colleague Sarah at sarah.jones@acme-corp.com or 555-234-5678 for any questions." were being incorrectly treated as "pure Q&A" because:
+1. The phrase "for any questions" triggered `is_question=True` in unified detection
+2. The QNA_GUARD used text-based `_looks_like_offer_acceptance()` which didn't recognize "Room B would be great" as acceptance
+3. This violated the LLM-First Rule from CLAUDE.md
+
+**Solution:** Three changes to Step 4's QNA_GUARD:
+1. **LLM-first acceptance:** Now checks `unified_detection.is_acceptance` FIRST, with text pattern as fallback
+2. **Contact info bypass:** If user provides contact info (name/email/phone extracted), it's NOT pure Q&A
+3. **Debug logging:** Added detailed logging of all QNA_GUARD decision variables
+
+**Files Modified:**
+- `workflows/steps/step4_offer/trigger/step4_handler.py` - LLM-first acceptance, contact info guard, debug logging
+
+**Result:** Room acceptance + contact info messages now correctly generate offers instead of being blocked by the QNA_GUARD.
+
+**Tests:** All 177 regression tests pass, all 98 step4 tests pass.
+
 ---
 
 ## 2026-01-21

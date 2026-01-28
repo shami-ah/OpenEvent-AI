@@ -658,9 +658,9 @@ Result: One combined message with "Great choice! Room F is confirmed... Here is 
 **Severity**: Medium
 **Symptom**: Acknowledgment phrases like "thanks for the parking info" were detected as Q&A questions by keyword patterns, even after BUG-036 fix.
 **Root Cause**: Keyword-based Q&A detection didn't filter out common acknowledgment and confirmation patterns before applying Q&A type detection.
-**Fix**: Added `_is_acknowledgment()` and `_is_confirmation_request()` helper functions in `classifier.py` that filter out acknowledgment patterns ("thanks for", "got it", "understood") and confirmation requests ("sounds good", "works for me") BEFORE Q&A type detection.
+**Fix**: Added `_is_acknowledgment()` and `_is_confirmation_request()` helper functions in `classifier.py`. Acknowledgments still short-circuit Q&A detection; confirmation language no longer blocks hybrid confirmation + Q&A (see BUG-047).
 **Files**: `detection/intent/classifier.py` (lines 391-450)
-**Key Learning**: Always apply acknowledgment/confirmation filters BEFORE keyword-based detection. This is a defense-in-depth approach - even if the LLM signal check fails, the acknowledgment filter catches obvious false positives.
+**Key Learning**: Keep acknowledgment filters strict, but avoid suppressing hybrid confirmation + Q&A with confirmation-only guards.
 
 ### BUG-038: Pattern-only Q&A Detection False Positives
 **Status**: Fixed (2026-01-20)
@@ -800,6 +800,44 @@ Result: Hybrid messages now correctly detect acceptance from the statement porti
 2. Step 3: Show "Room B is no longer available on 12.05.2026" + alternative rooms (A, D, F)
 
 **Key Learning**: Inter-step communication via flags (`_locked_room_unavailable_on_new_date`) must set ALL required downstream state before clearing the source data (`locked_room_id`).
+
+### BUG-047: Hybrid Confirmation + Q&A Dropped by Confirmation Filter
+**Status**: Fixed (2026-01-27)
+**Severity**: Medium
+**Symptom**: Hybrid messages like "Let's proceed with Room C. Do you offer catering packages?" produced no Q&A types. Related misses: "can we book it?" was not detected as availability Q&A, and "coffee breaks" questions were not recognized as catering.
+**Root Cause**: `_detect_qna_types()` short-circuited on confirmation language before running Q&A keyword/regex matching. Catering keywords lacked "coffee breaks".
+**Fix**: Allow Q&A detection to proceed even when confirmation language is present; add "coffee breaks" to catering keywords.
+**Files**: `detection/intent/classifier.py`
+**Tests**: `tests/detection/test_hybrid_qna.py`, `tests/detection/test_room_search_intents.py`, `tests/detection/test_qna_detection.py`
+**Key Learning**: Confirmation filters should only suppress pure confirmations, not hybrid confirmation + Q&A.
+
+### BUG-048: Change Requests with Question Marks Treated as Q&A
+**Status**: Fixed (2026-01-27)
+**Severity**: High
+**Symptom**: Change requests like "Could we push it back to March 1st?", "Could we add Prosecco to the order?", and "Der 21. klappt doch nicht mehr, ginge der 28.?" were treated as Q&A (no detour).
+**Root Cause**: The Q&A fallback guard in `detect_change_type_enhanced()` used a narrow keyword list, so question-marked change phrasing was filtered out.
+**Fix**: Expanded `explicit_change_keywords` with common English/German change idioms (push back, add, klappt, ginge).
+**Files**: `workflows/change_propagation.py`
+**Tests**: `tests/detection/test_detour_detection.py`
+**Key Learning**: Q&A fallback guards must allow common change verbs even when phrased as questions.
+
+### BUG-049: Room Shortcut Ignored Unified is_question on Single-Sentence Queries
+**Status**: Fixed (2026-01-27)
+**Severity**: Medium
+**Symptom**: "I was wondering about Room A" with `is_question=True` still locked Room A.
+**Root Cause**: Room detection only blocked `is_question` when no non-question sentence existed; single-sentence questions without "?" slipped through.
+**Fix**: Sentence-aware guard: if unified `is_question=True` and the message is a single sentence (or all sentences are questions), skip room locking.
+**Files**: `workflows/steps/step1_intake/trigger/room_detection.py`
+**Tests**: `tests/detection/test_detection_interference.py`
+
+### BUG-050: Q&A Router Import Cycle for Anchor Extraction
+**Status**: Fixed (2026-01-27)
+**Severity**: Low
+**Symptom**: Importing `_extract_anchor` from `workflows/qna/router.py` raised a circular import error.
+**Root Cause**: `load_room_static` was imported at module load, triggering `services.qna_readonly -> pricing -> workflows.steps -> qna.engine -> services.qna_readonly`.
+**Fix**: Lazy-import `load_room_static` inside Q&A response helpers.
+**Files**: `workflows/qna/router.py`
+**Tests**: `tests/detection/test_hybrid_qna.py`
 
 ---
 

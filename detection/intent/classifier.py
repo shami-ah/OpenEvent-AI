@@ -142,6 +142,7 @@ _QNA_KEYWORDS: Dict[str, Sequence[str]] = {
         "beverage options",
         "drink options",
         "coffee break options",
+        "coffee breaks",
         "snack options",
         # NOTE: "dinner", "lunch" removed - they are event types, not catering questions
         # Asking "I want a dinner" is different from "what's for dinner?"
@@ -425,10 +426,6 @@ def _detect_qna_types(text: str) -> List[str]:
     # Instead, we detect Q&A types even if it looks like an action/confirmation.
     # But we still filter out pure acknowledgments.
     if _is_acknowledgment(text):
-        return []
-
-    # Filter out confirmation requests - "Can you confirm Room A?" is not Q&A
-    if _is_confirmation_request(text):
         return []
 
     matches: List[str] = []

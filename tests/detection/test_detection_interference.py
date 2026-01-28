@@ -36,6 +36,7 @@ class MockUnifiedDetection:
     is_acceptance: bool = False
     is_rejection: bool = False
     is_question: bool = False
+    is_change_request: bool = False
     qna_types: List[str] = field(default_factory=list)
 
 

@@ -78,41 +78,32 @@ def detect_room_choice(
     # BUT "Room B looks perfect. Do you offer catering?" SHOULD lock Room B
     # (the question is unrelated to the room selection)
     # -------------------------------------------------------------------------
-    # Split into sentences and check if room mention is in a question sentence
-    sentences = re.split(r'[.!]\s*', lowered)
-    # Only block if the ENTIRE message is a question or room is in question sentence
-    is_pure_question = lowered.strip().endswith("?") and len(sentences) <= 1
+    # Split into sentences (keep punctuation to detect questions)
+    sentences = [s.strip() for s in re.findall(r"[^.!?]+[.!?]?", lowered) if s.strip()]
+    # Only block if the ENTIRE message is a question
+    is_pure_question = len(sentences) == 1 and sentences[0].endswith("?")
 
     if is_pure_question:
         return None
 
-    # Also check unified detection is_question signal - but only for pure questions
-    # Hybrid messages (statement + question) should still detect room from statement part
+    # Also check unified detection is_question signal.
+    # Hybrid messages (statement + question) should still detect room from statement part.
     if unified_detection and getattr(unified_detection, "is_question", False):
-        # Check if there's a non-question sentence with room confirmation
-        non_question_parts = [s for s in sentences if "?" not in s and s.strip()]
+        # If it's a single-sentence message, trust unified detection and skip locking.
+        if len(sentences) == 1:
+            return None
+        # If all sentences are questions, skip locking.
+        non_question_parts = [s for s in sentences if not s.endswith("?")]
         if not non_question_parts:
             return None
 
     # -------------------------------------------------------------------------
-    # FIX: Acceptance guard - don't lock room if message is accepting an offer
-    # "I accept this offer for Room A" should NOT trigger room choice detection
-    # The room is already locked; this is a confirmation, not a new selection.
+    # NOTE: The ACCEPTANCE_GUARD was removed because it's redundant and causes bugs.
+    # - The IDEMPOTENCY_GUARD (line 51-54) already handles the case where room is locked.
+    # - When room is NOT locked, is_acceptance=True for "Room B sounds perfect" is a
+    #   valid room SELECTION, not an offer acceptance. Blocking it breaks the flow.
+    # - "I accept this offer" with an already-locked room is handled by IDEMPOTENCY_GUARD.
     # -------------------------------------------------------------------------
-    if unified_detection and getattr(unified_detection, "is_acceptance", False):
-        logger.debug("[ROOM_DETECT] ACCEPTANCE_GUARD: is_acceptance=True, skipping room detection")
-        return None
-
-    # Fallback regex guard for acceptance (when unified detection unavailable)
-    acceptance_patterns = [
-        r"\bi\s+accept\b", r"\bwe\s+accept\b", r"\baccept\s+(this|the)\s+offer\b",
-        r"\bi\s+confirm\b", r"\bwe\s+confirm\b", r"\bconfirm\s+(this|the)\s+offer\b",
-        r"\bgo\s+ahead\b", r"\bbook\s+it\b", r"\blet'?s\s+book\b",
-    ]
-    for pattern in acceptance_patterns:
-        if re.search(pattern, lowered):
-            logger.debug("[ROOM_DETECT] ACCEPTANCE_GUARD: matched pattern '%s', skipping room detection", pattern)
-            return None
     condensed = normalize_room_token(text)
 
     # direct match against known room labels (with word boundaries to avoid "room for" matching "Room F")

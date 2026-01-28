@@ -607,7 +607,13 @@ def process(state: WorkflowState) -> GroupResult:
 
         if should_generate_offer:
             # Check if this is PURE Q&A (no acceptance signal, no room confirmation this turn)
-            has_acceptance = _looks_like_offer_acceptance(normalized_message_text)
+            # LLM-first: Check unified detection for acceptance signal
+            llm_has_acceptance = (
+                unified_detection is not None
+                and unified_detection.is_acceptance
+            )
+            text_has_acceptance = _looks_like_offer_acceptance(normalized_message_text)
+            has_acceptance = llm_has_acceptance or text_has_acceptance
             # LLM-first: Check unified detection for question signal (fixes BUG-036)
             # Only use question mark as fallback when LLM detection unavailable
             llm_says_question = (
@@ -624,7 +630,22 @@ def process(state: WorkflowState) -> GroupResult:
             # Check if we came from a detour (date/room change) - if so, always generate offer
             is_detour_call = event_entry.get("caller_step") is not None
 
-            if is_pure_question and not has_acceptance and not room_just_confirmed and not is_detour_call:
+            # Guard: If user is providing contact info, it's NOT pure Q&A
+            # e.g., "You can reach Sarah at sarah@acme.com for any questions" provides booking info
+            has_contact_info = (
+                unified_detection is not None
+                and (unified_detection.contact_name or unified_detection.contact_email or unified_detection.contact_phone)
+            )
+
+            # Debug logging for QNA_GUARD decision
+            logger.debug(
+                "[Step4][QNA_GUARD_CHECK] is_question=%s, has_acceptance=%s (llm=%s, text=%s), "
+                "room_confirmed=%s, detour=%s, has_contact=%s",
+                is_pure_question, has_acceptance, llm_has_acceptance, text_has_acceptance,
+                room_just_confirmed, is_detour_call, has_contact_info
+            )
+
+            if is_pure_question and not has_acceptance and not room_just_confirmed and not is_detour_call and not has_contact_info:
                 # PURE Q&A: Return early - don't generate offer or progress steps
                 # E.g., "Does Room A have a projector?" at Step 4 should stay at Step 4
                 # But NOT for detour calls - those must regenerate the offer
@@ -633,6 +654,8 @@ def process(state: WorkflowState) -> GroupResult:
                 return result
             elif is_detour_call:
                 logger.info("[Step4][DETOUR_BYPASS] Bypassing QNA_GUARD - came from detour (caller=%s)", event_entry.get("caller_step"))
+            elif has_contact_info:
+                logger.info("[Step4][CONTACT_BYPASS] Bypassing QNA_GUARD - contact info provided")
             else:
                 # HYBRID: Room confirmation + Q&A, or acceptance + Q&A
                 # E.g., "Room B looks perfect. Do you offer catering?" - confirm room, answer Q&A, then offer

@@ -177,13 +177,25 @@ def _extract_workflow_reply(wf_res: Dict[str, Any]) -> tuple[str, List[Dict[str,
     # e.g., "Book room for April 5 + what menu options do you have?"
     # SKIP for pure_info_qna - the Q&A content is already in the draft message
     # SKIP for detour flows - Q&A should not be appended to date/room change responses
+    # SKIP when workflow action already answers the Q&A (prevents redundant responses)
+    # Mapping of workflow actions to Q&A they already answer:
+    # - room_avail_result: rooms are shown, so room Q&A is redundant
+    # - date_confirmed/date_time_clarification: date info shown, so date Q&A is redundant
+    # - offer_generated: pricing shown, so pricing Q&A is redundant
+    ACTIONS_THAT_ANSWER_QNA = {
+        "room_avail_result",           # Step 3 shows room availability
+        "room_selected",               # Step 3 shows room selection
+        "offer_generated",             # Step 4 shows pricing/products
+        "offer_sent",                  # Step 4 shows offer
+    }
     is_pure_qna = wf_res.get("pure_info_qna", False)
     wf_action = wf_res.get("action", "")
     is_detour = wf_action in ("change_detour", "structural_change_detour")
+    workflow_answers_qna = wf_action in ACTIONS_THAT_ANSWER_QNA
     hybrid_qna = wf_res.get("hybrid_qna_response")
-    if hybrid_qna and text and not is_pure_qna and not is_detour:
+    if hybrid_qna and text and not is_pure_qna and not is_detour and not workflow_answers_qna:
         text = text.strip() + "\n\n---\n\n" + hybrid_qna
-    elif hybrid_qna and not is_pure_qna and not is_detour:
+    elif hybrid_qna and not is_pure_qna and not is_detour and not workflow_answers_qna:
         text = hybrid_qna
 
     return text.strip(), actions

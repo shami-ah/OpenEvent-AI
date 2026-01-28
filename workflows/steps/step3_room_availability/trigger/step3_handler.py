@@ -105,6 +105,7 @@ from .conflict_resolution import (
 from .detour_handling import (
     detour_to_date as _detour_to_date,
     detour_for_capacity as _detour_for_capacity,
+    detour_for_time_slot as _detour_for_time_slot,
     skip_room_evaluation as _skip_room_evaluation,
     handle_capacity_exceeded as _handle_capacity_exceeded,
 )
@@ -180,6 +181,24 @@ def process(state: WorkflowState) -> GroupResult:
     trace_gate(thread_id, "Step3_Room", "date_confirmed", date_confirmed_ok, {"date_confirmed": date_confirmed_ok})
     if not date_confirmed_ok:
         return _detour_to_date(state, event_entry)
+
+    # Time slot gate - require start_time or end_time before showing room availability
+    # Room availability depends on time window (morning vs afternoon bookings differ)
+    # EXCEPTION: If this is a Q&A question about rooms, bypass gate and let Q&A handle it
+    captured = event_entry.get("captured") or {}
+    has_time_slot = bool(captured.get("start_time") or captured.get("end_time"))
+
+    # Check if this is a pure Q&A question about rooms (should bypass time slot gate)
+    unified_detection = get_unified_detection(state)
+    is_room_qna = False
+    if unified_detection and getattr(unified_detection, "is_question", False):
+        qna_types = getattr(unified_detection, "qna_types", None) or []
+        room_related_types = {"check_availability", "free_dates", "room_features", "check_capacity", "rooms_by_feature"}
+        is_room_qna = bool(set(qna_types) & room_related_types)
+
+    trace_gate(thread_id, "Step3_Room", "time_slot", has_time_slot, {"start_time": captured.get("start_time"), "end_time": captured.get("end_time"), "is_room_qna": is_room_qna})
+    if not has_time_slot and not is_room_qna:
+        return _detour_for_time_slot(state, event_entry)
 
     requirements = event_entry.get("requirements") or {}
     current_req_hash = event_entry.get("requirements_hash")
@@ -463,8 +482,23 @@ def process(state: WorkflowState) -> GroupResult:
 
     # HYBRID FIX: Pre-generate hybrid Q&A response for hybrid messages
     # This will be appended to the workflow response by api/routes/messages.py
+    # BUT: Filter out room-related Q&A types when Step 3 will show room availability itself
+    # (prevents redundant "here are our rooms" Q&A when workflow is already showing rooms)
     if has_valid_qna and not classification.get("is_general"):
         qna_types = getattr(unified_detection, "qna_types", []) or []
+        # Room-related types that Step 3's room availability response already covers
+        room_qna_types_to_filter = {
+            "rooms_by_feature", "room_features", "check_availability", "free_dates", "check_capacity"
+        }
+        # Filter out room Q&A when we're about to show room availability
+        # (i.e., when time slot is captured so we won't detour)
+        captured = event_entry.get("captured") or {}
+        has_time_slot = bool(captured.get("start_time") or captured.get("end_time"))
+        if has_time_slot:
+            # Step 3 will show room availability - filter out redundant room Q&A
+            filtered_qna_types = [t for t in qna_types if t not in room_qna_types_to_filter]
+            logger.debug("[STEP3][HYBRID_QNA] Filtered room Q&A (time_slot captured): %s -> %s", qna_types, filtered_qna_types)
+            qna_types = filtered_qna_types
         if qna_types:
             hybrid_qna_response = generate_hybrid_qna_response(
                 qna_types=qna_types,
@@ -1118,12 +1152,13 @@ def process(state: WorkflowState) -> GroupResult:
         ROOM_OUTCOME_UNAVAILABLE: "room_unavailable",
     }[outcome]
 
+    # Show ALL available rooms, not just top 3 (client needs complete visibility)
     verbalizer_rooms = _verbalizer_rooms_payload(
         ranked_rooms,
         room_profiles,
         available_dates_map,
         needs_products=product_tokens,
-        limit=3,
+        limit=len(ranked_rooms),  # All rooms
     )
     rendered = render_rooms(
         state.event_id or "",

@@ -1031,8 +1031,9 @@ def detect_change_type_enhanced(
         text_lower = message_text.lower()
         explicit_change_keywords = [
             "change", "modify", "update", "instead", "cancel", "different",
-            "rather", "switch", "move", "reschedule", "prefer", "ändern",
-            "verschieben", "statt", "lieber", "wechseln",
+            "rather", "switch", "move", "reschedule", "prefer", "push back",
+            "push it back", "add ", "add to", "ändern", "verschieben", "statt",
+            "lieber", "wechseln", "klappt", "ginge",
         ]
         has_explicit_change = any(kw in text_lower for kw in explicit_change_keywords)
         if not has_explicit_change:

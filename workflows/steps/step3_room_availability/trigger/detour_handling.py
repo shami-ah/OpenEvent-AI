@@ -33,6 +33,8 @@ from workflows.common.types import GroupResult, WorkflowState
 from workflows.io.database import append_audit_entry, update_event_metadata
 from workflow.state import WorkflowStep
 from debug.hooks import trace_detour
+from workflows.qna.router import generate_hybrid_qna_response
+from workflows.common.detection_utils import get_unified_detection
 
 from .constants import ROOM_OUTCOME_CAPACITY_EXCEEDED
 from .selection import _thread_id, _format_display_date
@@ -162,6 +164,95 @@ def detour_for_capacity(state: WorkflowState, event_entry: dict) -> GroupResult:
     }
     # halt=True so the draft message is returned to the client
     return GroupResult(action="room_detour_capacity", payload=payload, halt=True)
+
+
+# -----------------------------------------------------------------------------
+# Time Slot Detour
+# -----------------------------------------------------------------------------
+
+
+def detour_for_time_slot(state: WorkflowState, event_entry: dict) -> GroupResult:
+    """[Trigger] Ask for time slot when missing, stay at Step 3.
+
+    Time slot (start_time/end_time) is mandatory before showing room availability
+    because room availability depends on the time window - a room might be
+    available in the morning but booked in the afternoon.
+
+    If the client also asked about rooms (hybrid Q&A), include room info in response.
+    """
+    thread_id = _thread_id(state)
+    trace_detour(
+        thread_id,
+        "Step3_Room",
+        "Step3_Room",  # Stay at Step 3
+        "time_slot_missing",
+        {},
+    )
+
+    # Check for hybrid Q&A - if client asked about rooms, include that info
+    hybrid_qna_part = ""
+    unified_detection = get_unified_detection(state)
+    if unified_detection:
+        is_question = getattr(unified_detection, "is_question", False)
+        qna_types = getattr(unified_detection, "qna_types", None) or []
+        # Check if asking about rooms/availability - use actual qna_type names from unified detection
+        room_qna_types = [t for t in qna_types if t in (
+            "check_availability", "free_dates", "room_features", "check_capacity"
+        )]
+        if is_question and room_qna_types:
+            # Generate room Q&A response
+            qna_response = generate_hybrid_qna_response(
+                qna_types=room_qna_types,
+                message_text=state.message.body or "",
+                event_entry=event_entry,
+                db=state.db,
+            )
+            if qna_response:
+                hybrid_qna_part = f"\n\n{qna_response}"
+                logger.debug("[TIME_SLOT_DETOUR] Including hybrid Q&A for types: %s", room_qna_types)
+
+    # Generate message asking for time slot
+    base_message = (
+        "To check room availability, I also need to know your preferred time window. "
+        "What time would your event start and end? For example: 9am to 5pm, or morning/afternoon."
+    )
+    full_message = base_message + hybrid_qna_part
+    draft_body = append_footer(
+        full_message,
+        step=3,
+        next_step=3,
+        thread_state="Awaiting Client",
+    )
+    draft = {
+        "body": draft_body,
+        "body_markdown": draft_body,
+        "topic": "time_slot_request",
+        "requires_approval": False,
+    }
+    state.add_draft_message(draft)
+
+    # Stay at Step 3, waiting for time slot
+    update_event_metadata(
+        event_entry,
+        current_step=3,
+        thread_state="Awaiting Client",
+    )
+    append_audit_entry(event_entry, 3, 3, "room_requires_time_slot")
+    state.current_step = 3
+    state.set_thread_state("Awaiting Client")
+    state.extras["persist"] = True
+
+    payload = {
+        "client_id": state.client_id,
+        "event_id": state.event_id,
+        "intent": state.intent.value if state.intent else None,
+        "confidence": round(state.confidence or 0.0, 3),
+        "reason": "time_slot_missing",
+        "context": state.context_snapshot,
+        "persisted": True,
+    }
+    # halt=True so the draft message is returned to the client
+    return GroupResult(action="room_detour_time_slot", payload=payload, halt=True)
 
 
 # -----------------------------------------------------------------------------
@@ -346,17 +437,20 @@ _detour_to_date = detour_to_date
 _detour_for_capacity = detour_for_capacity
 _skip_room_evaluation = skip_room_evaluation
 _handle_capacity_exceeded = handle_capacity_exceeded
+_detour_for_time_slot = detour_for_time_slot
 
 
 __all__ = [
     # Main functions
     "detour_to_date",
     "detour_for_capacity",
+    "detour_for_time_slot",
     "skip_room_evaluation",
     "handle_capacity_exceeded",
     # Backwards compat aliases
     "_detour_to_date",
     "_detour_for_capacity",
+    "_detour_for_time_slot",
     "_skip_room_evaluation",
     "_handle_capacity_exceeded",
 ]
