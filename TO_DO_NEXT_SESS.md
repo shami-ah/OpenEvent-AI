@@ -22,6 +22,7 @@ This file tracks active implementation goals and planned roadmap items. **Check 
 | 2025-12-24 | **Circular Bug Elimination** | Audit routing loops and special flow guards | **Urgent** |
 | 2026-01-13 | **LLM Site Visit Detection** | Replace regex/keyword detection in `router.py` with LLM-based NLU | **Medium** |
 | 2025-12-24 | **Integration Completion** | Supabase/Hostinger production readiness | **High** |
+| 2026-01-28 | **Activity Logger Integration** | Hook activity logging into key workflow events (see below) | **Medium** |
 | ~~2025-12-24~~ | ~~**Billing Flow Robustness**~~ | ✅ **IMPROVED 2026-01-13** - Fixed 4-part BUG-015 (deposit → Step 7): halt flag, out-of-context bypass, deposit_just_paid check in step7_handler, frontend canAction list. See `DEV_CHANGELOG.md`. | ~~**High**~~ |
 | ~~2025-12-28~~ | ~~**Documentation Hygiene**~~ | ✅ **DONE 2025-12-28** - Refreshed `tests/TEST_INVENTORY.md`, closed stale checklist items, and updated this roadmap. | ~~**Medium**~~ |
 | ~~2025-12-28~~ | ~~**DCON1 – Detection Import Cleanup**~~ | ✅ **DONE 2025-12-28** - Updated tests to import from stable detection/workflow surfaces; verified pytest collect-only and targeted suites. | ~~**High**~~ |
@@ -46,3 +47,45 @@ This file tracks active implementation goals and planned roadmap items. **Check 
 | 2025-12-08 | **Test Pages/Links** | `docs/plans/active/test_pages_and_links_integration.md` | Low |
 | 2025-12-05 | **Pseudo-links Calendar** | `docs/plans/active/pseudolinks_calendar_integration.md` | Low |
 | 2025-12-01 | **Hostinger Logic Update** | `docs/plans/completed/HOSTINGER_UPDATE_PLAN.md` | Medium |
+
+### Activity Logger Integration (2026-01-28)
+
+**Status:** ✅ Core module implemented + key workflow hooks connected. Tested with hybrid mode.
+
+**What's Done:**
+- ✅ Progress bar endpoint (`/api/events/{id}/progress`)
+- ✅ Activity log endpoint (`/api/events/{id}/activity`)
+- ✅ Persistence to event database
+- ✅ Two granularity levels (high=manager milestones, detailed=investigation breakdown)
+- ✅ Step transitions auto-logged (`step_*_entered`)
+- ✅ Status changes auto-logged (`status_lead`, `status_option`, `status_confirmed`)
+- ✅ `date_confirmed` hook in `confirmation_flow.py:522`
+- ✅ `date_denied` hook in `step2_handler.py:1031`
+- ✅ `room_denied` hook in `step3_handler.py:1029`
+- ✅ `offer_sent` hook in `step4_handler.py`
+- ✅ `deposit_paid` hook in `events.py:127`
+- ✅ Unit tests (27 passing)
+- ✅ E2E test with hybrid mode (Gemini + OpenAI)
+
+**Remaining Integration Points:**
+
+| Activity | Where to Hook | Priority |
+|----------|---------------|----------|
+| `client_saved` | `workflows/io/database.py::create_client()` | Low |
+| `event_created` | `workflows/io/database.py::create_event()` | Low |
+| `date_changed` | `workflows/runtime/pre_route.py` when detour triggered | Medium |
+| `room_changed` | `workflows/runtime/pre_route.py` when room change detected | Medium |
+| `offer_accepted` | `workflows/steps/step4_offer/` or HIL approval | Medium |
+| `deposit_set` | `workflows/steps/step4_offer/` when deposit configured | Low |
+| `site_visit_booked` | `workflows/steps/step7_confirmation/` | Medium |
+| `hil_*` | `workflows/runtime/hil_tasks.py` | Low |
+
+**Known Issue:**
+- `session_id` (thread_id) != `event_id` - activity endpoints use event_id, not session_id
+
+**Supabase Migration (Future):**
+- Current: Activities in `event.activity_log` JSONB array
+- Future: Separate `event_activities` table if > 10K events/month
+- See `docs/integration/ACTIVITY_LOGGER_INTEGRATION.md`
+
+**Cost Impact:** Zero additional API costs (no LLM calls)

@@ -870,6 +870,12 @@ def process(state: WorkflowState) -> GroupResult:
         "context": state.context_snapshot,
         "persisted": True,
     }
+
+    # Log offer sent activity
+    from activity.persistence import log_workflow_activity
+    amount_str = f"€{total_amount}" if total_amount else ""
+    log_workflow_activity(event_entry, "offer_sent", amount=amount_str)
+
     result = GroupResult(action="offer_draft_prepared", payload=payload, halt=True)
     if deferred_general_qna:
         _append_deferred_general_qna(state, event_entry, classification, thread_id)

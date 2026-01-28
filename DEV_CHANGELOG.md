@@ -1,5 +1,54 @@
 # Development Changelog
 
+## 2026-01-28
+
+### Feature: Activity Logger Workflow Integration
+
+**Goal:** Connect the Activity Logger module to actual workflow events so managers can trace what the AI did during each booking.
+
+**Hooks Added:**
+- `date_confirmed` → `confirmation_flow.py:522` - When client confirms a date
+- `date_denied` → `step2_handler.py:1031` - When requested date is unavailable
+- `room_denied` → `step3_handler.py:1029` - When locked room becomes unavailable
+- `offer_sent` → `step4_handler.py` - When offer is generated (with amount)
+- `deposit_paid` → `events.py:127` - When deposit payment is recorded
+- `status_*` → `database.py::update_event_metadata()` - Room status changes (Lead/Option/Confirmed)
+- `step_*_entered` → `database.py::update_event_metadata()` - Step transitions
+
+**Bug Fixes:**
+- Fixed `date_confirmed` granularity: was "detailed", now "high" (main milestone)
+- Fixed `deposit_required` template: removed missing `{due_date}` placeholder
+
+**DevEx Improvement:**
+- Updated `scripts/dev/oe_env.sh` to load both Gemini and OpenAI keys from Keychain
+- Added key status output: `[OpenAI:✓ Gemini:✓] - Hybrid mode ready`
+
+**Files Modified:**
+- `workflows/steps/step2_date_confirmation/trigger/confirmation_flow.py` - Added date_confirmed hook
+- `workflows/steps/step2_date_confirmation/trigger/step2_handler.py` - Added date_denied hook
+- `workflows/steps/step3_room_availability/trigger/step3_handler.py` - Added room_denied hook
+- `activity/persistence.py` - Fixed date_confirmed granularity, deposit_required template
+- `scripts/dev/oe_env.sh` - Added Gemini key loading for hybrid mode
+
+**Test Results:** 27 unit tests passing. E2E verified with hybrid mode (Gemini + OpenAI).
+
+**Remaining:** ~8 more activity hooks (detours, HIL actions, site visit) - see TO_DO_NEXT_SESS.md
+
+---
+
+### Feature: Feature-Flagged Prompt Editor (Safe by Default)
+
+**Goal:** Keep prompt editing inactive unless explicitly enabled, to avoid disrupting active deployment work.
+
+**Solution:** Added a feature flag gate for the prompts editor UI and its backend endpoints. Default is OFF; editors must set `PROMPTS_EDITOR_ENABLED=true` (backend) and `NEXT_PUBLIC_PROMPTS_EDITOR_ENABLED=true` (frontend).
+
+**Files Modified:**
+- `api/routes/config.py` - Guard `/api/config/prompts*` endpoints behind feature flag
+- `atelier-ai-frontend/app/admin/prompts/page.tsx` - Hide prompts editor page unless enabled
+- `docs/plans/active/integration/PROMPT_CUSTOMIZATION_GUARDRAILS.md` - Documented guardrails + flags
+
+---
+
 ## 2026-01-27
 
 ### Feature: Global Field Capture System

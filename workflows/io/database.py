@@ -542,9 +542,16 @@ def update_event_metadata(event: Dict[str, Any], **fields: Any) -> None:
 
     When 'status' is set to a booking status (Lead/Option/Confirmed),
     also syncs to event_data["Status"] for backward compatibility.
+
+    Also logs manager-visible activities for key workflow transitions.
     """
+    from activity.persistence import log_workflow_activity
 
     ensure_event_defaults(event)
+
+    # Track step changes for activity logging
+    old_step = event.get("current_step")
+
     for key, value in fields.items():
         event[key] = value
 
@@ -554,6 +561,19 @@ def update_event_metadata(event: Dict[str, Any], **fields: Any) -> None:
         booking_status = fields["status"]
         if booking_status in ("Lead", "Option", "Confirmed"):
             event.setdefault("event_data", {})["Status"] = booking_status
+            # Log room status change (coarse - always visible)
+            status_key = f"status_{booking_status.lower()}"
+            log_workflow_activity(event, status_key)
+        elif booking_status == "Cancelled":
+            reason = fields.get("cancellation_reason", "")
+            log_workflow_activity(event, "status_cancelled", reason=reason)
+
+    # Log activity for step transitions (manager-visible)
+    if "current_step" in fields:
+        new_step = fields["current_step"]
+        if new_step != old_step and new_step in (1, 2, 3, 4, 5, 6, 7):
+            activity_key = f"step_{new_step}_entered"
+            log_workflow_activity(event, activity_key)
 
 
 def tag_message(event_entry: Dict[str, Any], msg_id: Optional[str]) -> None:

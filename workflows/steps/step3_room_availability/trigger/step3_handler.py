@@ -1025,6 +1025,9 @@ def process(state: WorkflowState) -> GroupResult:
                 room_eval_hash=None,
             )
             append_audit_entry(event_entry, 3, 3, "room_unavailable_after_date_change")
+            # Log room denied activity for manager visibility
+            from activity.persistence import log_workflow_activity
+            log_workflow_activity(event_entry, "room_denied", room=locked_room_id, date=chosen_date)
 
             # STORE cleared room info so we can tell the user their room is no longer available
             state.extras["_cleared_room_name"] = locked_room_id

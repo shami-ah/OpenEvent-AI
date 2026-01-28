@@ -518,6 +518,10 @@ def finalize_confirmation(
         requirements_hash=new_req_hash,
         thread_state="In Progress",
     )
+    # Log date confirmation activity for manager visibility
+    from activity.persistence import log_workflow_activity
+    log_workflow_activity(event_entry, "date_confirmed", date=window.display_date)
+
     if event_entry.get("calendar_event_id"):
         try:
             update_calendar_event_status(event_entry.get("event_id", ""), event_entry.get("status", ""), "lead")

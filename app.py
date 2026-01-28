@@ -90,7 +90,9 @@ def create_app() -> FastAPI:
         workflow_router,
         messages_router,
         emails_router,
+        activity_router,
     )
+    from api.agent_router import router as agent_router
 
     # Include route modules
     app.include_router(tasks_router)
@@ -103,14 +105,12 @@ def create_app() -> FastAPI:
         app.include_router(debug_router)
 
     app.include_router(snapshots_router)
-
-    # Test-data router only in dev mode
-    if is_dev:
-        app.include_router(test_data_router)
-
+    app.include_router(test_data_router)
     app.include_router(workflow_router)
     app.include_router(messages_router)
     app.include_router(emails_router)
+    app.include_router(activity_router)
+    app.include_router(agent_router)
 
     # Import middleware (lazy import)
     from api.middleware import TenantContextMiddleware, AuthMiddleware, setup_rate_limiting

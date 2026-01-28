@@ -2,7 +2,7 @@
 
 All endpoints tested without frontend.
 
-**Last updated:** 2026-01-05 (added 32 new endpoints, total: 45)
+**Last updated:** 2026-01-28 (full audit: added emails, cancel, config, agent/chatkit endpoints; total: 70+)
 
 ---
 
@@ -300,6 +300,82 @@ INPUT:    curl -X POST http://localhost:8000/api/event/deposit/pay \
 EXPECTED: {status: "ok", event_id, deposit_amount, deposit_paid_at}
 
 NOTES:    Marks deposit as paid and triggers workflow continuation.
+RESULT:   PASS
+```
+
+---
+
+### TEST 17b: GET /api/events/{event_id}/progress
+```
+INPUT:    curl http://localhost:8000/api/events/evt_abc123/progress \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {
+  "current_stage": "room",
+  "stages": [
+    {"id": "date", "label": "Date", "status": "completed", "icon": "📅"},
+    {"id": "room", "label": "Room", "status": "active", "icon": "🏢"},
+    {"id": "offer", "label": "Offer", "status": "pending", "icon": "📄"},
+    {"id": "deposit", "label": "Deposit", "status": "pending", "icon": "💳"},
+    {"id": "confirmed", "label": "Confirmed", "status": "pending", "icon": "✅"}
+  ],
+  "percentage": 40
+}
+
+NOTES:    Returns workflow progress bar state. Maps 7-step workflow to 5 visual stages.
+          Stage status: "completed" | "active" | "pending"
+RESULT:   PASS
+```
+
+---
+
+### TEST 17c: GET /api/events/{event_id}/activity (Coarse)
+```
+INPUT:    curl "http://localhost:8000/api/events/evt_abc123/activity?granularity=high&limit=20" \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {
+  "activities": [
+    {
+      "id": "act_1706450000000",
+      "timestamp": "2026-01-28T10:30:00",
+      "icon": "📄",
+      "title": "Offer Sent",
+      "detail": "€1,500",
+      "granularity": "high"
+    }
+  ],
+  "has_more": false,
+  "granularity": "high"
+}
+
+NOTES:    Returns AI activity log. Default granularity=high shows main milestones only.
+          Timestamps are LOCAL timezone (not UTC).
+          Activities persist in database (survives restarts).
+RESULT:   PASS
+```
+
+---
+
+### TEST 17d: GET /api/events/{event_id}/activity (Fine/Detailed)
+```
+INPUT:    curl "http://localhost:8000/api/events/evt_abc123/activity?granularity=detailed&limit=50" \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {
+  "activities": [
+    {"icon": "📄", "title": "Preparing Offer", "granularity": "detailed", ...},
+    {"icon": "👤", "title": "Name Captured", "detail": "John Smith", "granularity": "detailed", ...},
+    {"icon": "📧", "title": "Email Captured", "detail": "john@example.com", "granularity": "detailed", ...},
+    {"icon": "📄", "title": "Offer Sent", "detail": "€1,500", "granularity": "high", ...}
+  ],
+  "has_more": false,
+  "granularity": "detailed"
+}
+
+NOTES:    granularity=detailed shows breakdown of each milestone.
+          Fine view includes: contact info captured, rooms checked, manager actions, etc.
+          Both high and detailed activities are manager-focused (no technical debugging).
 RESULT:   PASS
 ```
 
@@ -681,6 +757,552 @@ RESULT:   PASS (when ENABLE_DANGEROUS_ENDPOINTS=true)
 
 ---
 
+### SECTION 10: Email Sending
+
+**Route file:** `api/routes/emails.py` (prefix: `/api/emails`)
+
+---
+
+### TEST 44: POST /api/emails/send-to-client
+```
+INPUT:    curl -X POST http://localhost:8000/api/emails/send-to-client \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"to_email":"client@test.com","to_name":"Test Client","subject":"Booking confirmation","body_text":"Your room is confirmed.","event_id":"evt_abc123","task_id":"task_123"}'
+
+EXPECTED: {success: true, message: "...", to_email, subject}
+
+NOTES:    Called AFTER HIL approval to send actual email to client.
+          Returns simulated=true when SMTP not configured.
+          Applies plain text conversion if email-format config is set.
+RESULT:   PASS
+```
+
+---
+
+### TEST 45: POST /api/emails/send-offer
+```
+INPUT:    curl -X POST http://localhost:8000/api/emails/send-offer \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"event_id":"evt_abc123","subject":"Event Offer - 17.12.2025","custom_message":"Looking forward to your event!"}'
+
+EXPECTED: {success: true, message: "...", offer_total: number}
+
+NOTES:    Composes and sends an offer email using event data.
+          Event must exist and have client email.
+          Returns simulated=true when SMTP not configured.
+RESULT:   PASS
+```
+
+---
+
+### TEST 46: POST /api/emails/test
+```
+INPUT:    curl -X POST http://localhost:8000/api/emails/test \
+            -H "Content-Type: application/json" \
+            -d '{"to_email":"admin@test.com","to_name":"Admin"}'
+
+EXPECTED: {success: true} or {success: false, error: "SMTP not configured..."}
+
+NOTES:    Verifies SMTP configuration by sending a test email.
+          Requires ENABLE_TEST_ENDPOINTS=true.
+RESULT:   PASS (when ENABLE_TEST_ENDPOINTS=true)
+```
+
+---
+
+### SECTION 11: Event Cancellation
+
+**Route file:** `api/routes/events.py`
+
+---
+
+### TEST 47: POST /api/event/{event_id}/cancel
+```
+INPUT:    curl -X POST http://localhost:8000/api/event/evt_abc123/cancel \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"event_id":"evt_abc123","confirmation":"CANCEL","reason":"Client changed plans"}'
+
+EXPECTED: {status: "cancelled", event_id, previous_step, had_site_visit, cancellation_type, archived_at}
+
+NOTES:    Manager action. Confirmation must be exactly "CANCEL" (case-sensitive).
+          Event is archived (not deleted) for audit trail.
+          cancellation_type is "site_visit" if step >= 7, otherwise "standard".
+          Returns {status: "already_cancelled"} if already cancelled.
+RESULT:   PASS
+```
+
+---
+
+### SECTION 12: Configuration (Extended)
+
+**Route file:** `api/routes/config.py` (prefix: `/api/config`)
+
+All config endpoints follow GET (read) / POST (write) pattern.
+
+---
+
+### TEST 48: GET /api/config/email-format
+```
+INPUT:    curl http://localhost:8000/api/config/email-format \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {plain_text: boolean, source: "environment"|"default"}
+
+NOTES:    Controls whether client emails strip Markdown formatting.
+RESULT:   PASS
+```
+
+---
+
+### TEST 49: POST /api/config/email-format
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/email-format \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"plain_text": true}'
+
+EXPECTED: {status: "ok", message: "..."}
+
+NOTES:    Info endpoint - actual setting controlled via EMAIL_PLAIN_TEXT env var.
+RESULT:   PASS
+```
+
+---
+
+### TEST 50: GET /api/config/llm-provider
+```
+INPUT:    curl http://localhost:8000/api/config/llm-provider \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {intent_provider, entity_provider, verbalization_provider, available_providers: [...]}
+
+NOTES:    Shows which LLM handles intent/entity/verbalization.
+          Default hybrid: Gemini for detection, OpenAI for verbalization.
+RESULT:   PASS
+```
+
+---
+
+### TEST 51: POST /api/config/llm-provider
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/llm-provider \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"intent_provider":"gemini","entity_provider":"gemini","verbalization_provider":"openai"}'
+
+EXPECTED: {status: "ok", ...}
+
+NOTES:    Valid providers: "openai", "gemini", "stub"
+RESULT:   PASS
+```
+
+---
+
+### TEST 52: GET /api/config/hybrid-enforcement
+```
+INPUT:    curl http://localhost:8000/api/config/hybrid-enforcement \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {enabled: boolean, ...}
+
+NOTES:    Shows whether hybrid mode enforcement is active.
+RESULT:   PASS
+```
+
+---
+
+### TEST 53: POST /api/config/hybrid-enforcement
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/hybrid-enforcement \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"enabled": true}'
+
+EXPECTED: {status: "ok", ...}
+RESULT:   PASS
+```
+
+---
+
+### TEST 54: GET /api/config/pre-filter
+```
+INPUT:    curl http://localhost:8000/api/config/pre-filter \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {mode: "enhanced"|"legacy", ...}
+
+NOTES:    "enhanced" = full keyword detection + signal flags.
+          "legacy" = basic duplicate detection only.
+RESULT:   PASS
+```
+
+---
+
+### TEST 55: POST /api/config/pre-filter
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/pre-filter \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"mode": "enhanced"}'
+
+EXPECTED: {status: "ok", ...}
+RESULT:   PASS
+```
+
+---
+
+### TEST 56: GET /api/config/detection-mode
+```
+INPUT:    curl http://localhost:8000/api/config/detection-mode \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {mode: "unified"|"legacy", ...}
+
+NOTES:    "unified" = new LLM-first detection pipeline.
+          "legacy" = older keyword-based detection.
+RESULT:   PASS
+```
+
+---
+
+### TEST 57: POST /api/config/detection-mode
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/detection-mode \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"mode": "unified"}'
+
+EXPECTED: {status: "ok", ...}
+RESULT:   PASS
+```
+
+---
+
+### TEST 58: GET /api/config/hil-email
+```
+INPUT:    curl http://localhost:8000/api/config/hil-email \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {smtp_host, smtp_port, smtp_user, from_email, from_name, ...}
+
+NOTES:    HIL email notification settings (how the system emails managers).
+RESULT:   PASS
+```
+
+---
+
+### TEST 59: POST /api/config/hil-email
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/hil-email \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"smtp_host":"smtp.example.com","smtp_port":587,"smtp_user":"user@example.com","from_email":"noreply@example.com","from_name":"OpenEvent"}'
+
+EXPECTED: {status: "ok", ...}
+RESULT:   PASS
+```
+
+---
+
+### TEST 60: POST /api/config/hil-email/test
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/hil-email/test \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"to_email":"admin@test.com"}'
+
+EXPECTED: {success: true|false, message: "..."}
+
+NOTES:    Sends a test HIL notification email to verify SMTP settings.
+RESULT:   PASS
+```
+
+---
+
+### TEST 61: GET /api/config/venue
+```
+INPUT:    curl http://localhost:8000/api/config/venue \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {name, city, timezone, ...}
+
+NOTES:    Venue identity settings used in all client communications.
+RESULT:   PASS
+```
+
+---
+
+### TEST 62: POST /api/config/venue
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/venue \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"name":"Grand Hotel","city":"Zurich","timezone":"Europe/Zurich"}'
+
+EXPECTED: {status: "ok", ...}
+RESULT:   PASS
+```
+
+---
+
+### TEST 63: GET /api/config/site-visit
+```
+INPUT:    curl http://localhost:8000/api/config/site-visit \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {blocked_dates: [...], slots: [...], weekday_rules: {...}}
+
+NOTES:    Site visit scheduling configuration (Step 7).
+RESULT:   PASS
+```
+
+---
+
+### TEST 64: POST /api/config/site-visit
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/site-visit \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"blocked_dates":["2025-12-25"],"slots":["10:00","14:00"]}'
+
+EXPECTED: {status: "ok", ...}
+RESULT:   PASS
+```
+
+---
+
+### TEST 65: GET /api/config/managers
+```
+INPUT:    curl http://localhost:8000/api/config/managers \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {managers: [{name, email, ...}, ...]}
+
+NOTES:    Manager list for escalation and HIL routing.
+RESULT:   PASS
+```
+
+---
+
+### TEST 66: POST /api/config/managers
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/managers \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"managers":[{"name":"John","email":"john@venue.com"}]}'
+
+EXPECTED: {status: "ok", ...}
+RESULT:   PASS
+```
+
+---
+
+### TEST 67: GET /api/config/products
+```
+INPUT:    curl http://localhost:8000/api/config/products \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {autofill_threshold: number, ...}
+
+NOTES:    Product autofill settings (when to auto-add products to offers).
+RESULT:   PASS
+```
+
+---
+
+### TEST 68: POST /api/config/products
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/products \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"autofill_threshold":0.8}'
+
+EXPECTED: {status: "ok", ...}
+RESULT:   PASS
+```
+
+---
+
+### TEST 69: GET /api/config/menus
+```
+INPUT:    curl http://localhost:8000/api/config/menus \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {menus: [...]}
+
+NOTES:    Catering menu settings.
+RESULT:   PASS
+```
+
+---
+
+### TEST 70: POST /api/config/menus
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/menus \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"menus":[...]}'
+
+EXPECTED: {status: "ok", ...}
+RESULT:   PASS
+```
+
+---
+
+### TEST 71: GET /api/config/catalog
+```
+INPUT:    curl http://localhost:8000/api/config/catalog \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {catalog: {...}}
+
+NOTES:    Product-room availability mapping.
+RESULT:   PASS
+```
+
+---
+
+### TEST 72: POST /api/config/catalog
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/catalog \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"catalog":{...}}'
+
+EXPECTED: {status: "ok", ...}
+RESULT:   PASS
+```
+
+---
+
+### TEST 73: GET /api/config/faq
+```
+INPUT:    curl http://localhost:8000/api/config/faq \
+            -H "X-Team-Id: team-demo"
+
+EXPECTED: {faq: [...]}
+
+NOTES:    FAQ entries for Q&A engine.
+RESULT:   PASS
+```
+
+---
+
+### TEST 74: POST /api/config/faq
+```
+INPUT:    curl -X POST http://localhost:8000/api/config/faq \
+            -H "Content-Type: application/json" \
+            -H "X-Team-Id: team-demo" \
+            -d '{"faq":[...]}'
+
+EXPECTED: {status: "ok", ...}
+RESULT:   PASS
+```
+
+---
+
+### SECTION 13: Agent / ChatKit Endpoints (Real-Time Streaming)
+
+**Route file:** `api/agent_router.py` (prefix: `/api/agent`)
+
+**Purpose:** These endpoints enable **real-time streaming chat** as an alternative to the
+email-based workflow. They use the same workflow engine but deliver responses as SSE streams.
+
+#### Current Usage
+
+| Frontend | API Used | Why |
+|----------|----------|-----|
+| **Main OpenEvent App** (production) | `/api/send-message` | Email-based workflow; async, not real-time |
+| **Test Frontend** (`atelier-ai-frontend/`) | `/api/send-message` | Manager dashboard testing |
+| **Test Frontend** `/agent` page | `/api/agent/chatkit/*` | Streaming demo with ChatKit library |
+
+**The main production app uses email-based communication, not real-time chat.**
+ChatKit endpoints exist for:
+1. The `/agent` demo page in the test frontend
+2. Future use: embedded chat widgets on public websites
+
+#### When to use which?
+
+| Use Case | Endpoint | Why |
+|----------|----------|-----|
+| Email workflow (production) | `/api/send-message` | JSON, async processing |
+| Manager dashboard testing | `/api/send-message` | JSON, complete responses |
+| Real-time chat widget | `/api/agent/chatkit/respond` | SSE streaming, tokens appear live |
+| Programmatic/webhook access | `/api/agent/reply` | JSON, non-streaming |
+
+**Both paths hit the same workflow engine** — the difference is response format:
+- `/api/send-message` → waits for entire workflow, returns JSON
+- `/api/agent/chatkit/respond` → streams tokens as LLM generates them (SSE)
+
+---
+
+### TEST 75: POST /api/agent/reply
+```
+INPUT:    curl -X POST http://localhost:8000/api/agent/reply \
+            -H "Content-Type: application/json" \
+            -d '{"thread_id":"abc123","message":"Book a room for 20 people","from_email":"client@test.com"}'
+
+EXPECTED: {thread_id, response, requires_hil, action, payload}
+
+NOTES:    Non-streaming JSON response. Use for programmatic access.
+          Tries: OpenAI Agents SDK → OpenAI Chat API → Deterministic Workflow (fallback).
+RESULT:   PASS
+```
+
+---
+
+### TEST 76: POST /api/agent/chatkit/session
+```
+INPUT:    curl -X POST http://localhost:8000/api/agent/chatkit/session \
+            -H "Content-Type: application/json" \
+            -d '{"from_email":"client@test.com"}'
+
+EXPECTED: {client_secret: "random-token-xyz"}
+
+NOTES:    Mints ephemeral auth token for ChatKit widget initialization.
+          Token is not persisted — backend authenticates on thread_id instead.
+          Required by @openai/chatkit-react library.
+RESULT:   PASS
+```
+
+---
+
+### TEST 77: POST /api/agent/chatkit/respond
+```
+INPUT:    curl -X POST http://localhost:8000/api/agent/chatkit/respond \
+            -H "Content-Type: application/json" \
+            -d '{"thread_id":"abc123","text":"I need a room for April 10"}'
+
+EXPECTED: StreamingResponse (SSE format: data: {"delta": "text"}\n\n)
+
+NOTES:    Streams tokens in real-time as LLM generates them.
+          Uses step-aware agent runner with tool gating per workflow step.
+          Falls back to deterministic workflow if OpenAI unavailable.
+RESULT:   PASS
+```
+
+---
+
+### TEST 78: POST /api/agent/chatkit/upload
+```
+INPUT:    curl -X POST http://localhost:8000/api/agent/chatkit/upload \
+            -H "Content-Type: multipart/form-data" \
+            -F "file=@document.pdf" \
+            -F "thread_id=abc123"
+
+EXPECTED: {file_name, content_type, size}
+
+NOTES:    File upload for ChatKit conversations. Max 10MB (configurable via MAX_UPLOAD_SIZE_MB).
+          Allowed types: images (jpeg/png/gif/webp), PDF, text, CSV, JSON.
+          Currently returns metadata only — file handling is a placeholder for future features.
+RESULT:   PASS
+```
+
+---
+
 ## Summary
 
 ### Core Endpoints (Always Available)
@@ -703,45 +1325,89 @@ RESULT:   PASS (when ENABLE_DANGEROUS_ENDPOINTS=true)
 | 14 | `/api/events` | GET | Events | List events |
 | 15 | `/api/events/{id}` | GET | Events | Get event |
 | 16 | `/api/event/{id}/deposit` | GET | Events | Deposit status |
-| 17 | `/api/event/deposit/pay` | POST | Events | Mark paid |
-| 18 | `/api/config/global-deposit` | GET | Config | Get deposit cfg |
-| 19 | `/api/config/global-deposit` | POST | Config | Set deposit cfg |
-| 20 | `/api/config/hil-mode` | GET | Config | Get HIL mode |
-| 21 | `/api/config/hil-mode` | POST | Config | Toggle HIL |
-| 22 | `/api/config/prompts` | GET | Config | Get prompts |
-| 23 | `/api/config/prompts` | POST | Config | Set prompts |
-| 24 | `/api/config/prompts/history` | GET | Config | Prompt history |
-| 25 | `/api/config/prompts/revert/{idx}` | POST | Config | Revert prompts |
-| 26 | `/api/qna` | GET | Data | Q&A queries |
-| 27 | `/api/test-data/rooms` | GET | Data | Room data |
-| 28 | `/api/test-data/catering` | GET | Data | Catering menus |
-| 29 | `/api/test-data/catering/{slug}` | GET | Data | Menu details |
-| 30 | `/api/test-data/qna` | GET | Data | Legacy Q&A |
-| 31 | `/api/snapshots` | GET | Snapshots | List |
-| 32 | `/api/snapshots/{id}` | GET | Snapshots | Get snapshot |
-| 33 | `/api/snapshots/{id}/data` | GET | Snapshots | Data only |
+| 17 | `/api/event/deposit/pay` | POST | Events | Mark paid (test only) |
+| 17b | `/api/events/{id}/progress` | GET | Activity | Workflow progress bar |
+| 17c | `/api/events/{id}/activity` | GET | Activity | AI activity log |
+| 18 | `/api/event/{id}/cancel` | POST | Events | Cancel event |
+| 19 | `/api/emails/send-to-client` | POST | Emails | Send email after HIL approval |
+| 20 | `/api/emails/send-offer` | POST | Emails | Send offer email |
+| 21 | `/api/config/global-deposit` | GET | Config | Get deposit cfg |
+| 22 | `/api/config/global-deposit` | POST | Config | Set deposit cfg |
+| 23 | `/api/config/hil-mode` | GET | Config | Get HIL mode |
+| 24 | `/api/config/hil-mode` | POST | Config | Toggle HIL |
+| 25 | `/api/config/email-format` | GET | Config | Get email format |
+| 26 | `/api/config/email-format` | POST | Config | Set email format |
+| 27 | `/api/config/llm-provider` | GET | Config | Get LLM providers |
+| 28 | `/api/config/llm-provider` | POST | Config | Set LLM providers |
+| 29 | `/api/config/hybrid-enforcement` | GET | Config | Get hybrid enforcement |
+| 30 | `/api/config/hybrid-enforcement` | POST | Config | Set hybrid enforcement |
+| 31 | `/api/config/pre-filter` | GET | Config | Get pre-filter mode |
+| 32 | `/api/config/pre-filter` | POST | Config | Set pre-filter mode |
+| 33 | `/api/config/detection-mode` | GET | Config | Get detection mode |
+| 34 | `/api/config/detection-mode` | POST | Config | Set detection mode |
+| 35 | `/api/config/prompts` | GET | Config | Get prompts |
+| 36 | `/api/config/prompts` | POST | Config | Set prompts |
+| 37 | `/api/config/prompts/history` | GET | Config | Prompt history |
+| 38 | `/api/config/prompts/revert/{idx}` | POST | Config | Revert prompts |
+| 39 | `/api/config/hil-email` | GET | Config | Get HIL email cfg |
+| 40 | `/api/config/hil-email` | POST | Config | Set HIL email cfg |
+| 41 | `/api/config/hil-email/test` | POST | Config | Test HIL email |
+| 42 | `/api/config/venue` | GET | Config | Get venue settings |
+| 43 | `/api/config/venue` | POST | Config | Set venue settings |
+| 44 | `/api/config/site-visit` | GET | Config | Get site visit cfg |
+| 45 | `/api/config/site-visit` | POST | Config | Set site visit cfg |
+| 46 | `/api/config/managers` | GET | Config | Get managers |
+| 47 | `/api/config/managers` | POST | Config | Set managers |
+| 48 | `/api/config/products` | GET | Config | Get product cfg |
+| 49 | `/api/config/products` | POST | Config | Set product cfg |
+| 50 | `/api/config/menus` | GET | Config | Get menus cfg |
+| 51 | `/api/config/menus` | POST | Config | Set menus cfg |
+| 52 | `/api/config/catalog` | GET | Config | Get catalog cfg |
+| 53 | `/api/config/catalog` | POST | Config | Set catalog cfg |
+| 54 | `/api/config/faq` | GET | Config | Get FAQ cfg |
+| 55 | `/api/config/faq` | POST | Config | Set FAQ cfg |
+| 56 | `/api/snapshots` | GET | Snapshots | List |
+| 57 | `/api/snapshots/{id}` | GET | Snapshots | Get snapshot |
+| 58 | `/api/snapshots/{id}/data` | GET | Snapshots | Data only |
+| 59 | `/api/qna` | GET | Data | Q&A queries |
+| 60 | `/api/test-data/rooms` | GET | Data | Room data |
+| 61 | `/api/test-data/catering` | GET | Data | Catering menus |
+| 62 | `/api/test-data/catering/{slug}` | GET | Data | Menu details |
+| 63 | `/api/test-data/qna` | GET | Data | Legacy Q&A |
+| 64 | `/api/config/room-deposit/{id}` | GET | Config | Room deposit cfg |
+| 65 | `/api/config/room-deposit/{id}` | POST | Config | Set room deposit |
 
-### Debug Endpoints (DEBUG_TRACE_ENABLED=true)
+### Agent / ChatKit Endpoints (Always Available)
 
 | # | Endpoint | Method | Notes |
 |---|----------|--------|-------|
-| 34 | `/api/debug/threads/{id}` | GET | Full trace |
-| 35 | `/api/debug/threads/{id}/timeline` | GET | Timeline events |
-| 36 | `/api/debug/threads/{id}/timeline/download` | GET | JSONL download |
-| 37 | `/api/debug/threads/{id}/timeline/text` | GET | Text format |
-| 38 | `/api/debug/threads/{id}/report` | GET | Debug report |
-| 39 | `/api/debug/threads/{id}/llm-diagnosis` | GET | LLM diagnosis |
-| 40 | `/api/debug/live` | GET | Active threads |
-| 41 | `/api/debug/threads/{id}/live` | GET | Live logs |
+| 66 | `/api/agent/reply` | POST | Non-streaming JSON response |
+| 67 | `/api/agent/chatkit/session` | POST | Mint session token |
+| 68 | `/api/agent/chatkit/respond` | POST | Streaming SSE response |
+| 69 | `/api/agent/chatkit/upload` | POST | File upload (10MB max) |
+
+### Debug Endpoints (ENV=dev + DEBUG_TRACE_ENABLED=true)
+
+| # | Endpoint | Method | Notes |
+|---|----------|--------|-------|
+| 70 | `/api/debug/threads/{id}` | GET | Full trace |
+| 71 | `/api/debug/threads/{id}/timeline` | GET | Timeline events |
+| 72 | `/api/debug/threads/{id}/timeline/download` | GET | JSONL download |
+| 73 | `/api/debug/threads/{id}/timeline/text` | GET | Text format |
+| 74 | `/api/debug/threads/{id}/report` | GET | Debug report |
+| 75 | `/api/debug/threads/{id}/llm-diagnosis` | GET | LLM diagnosis |
+| 76 | `/api/debug/live` | GET | Active threads |
+| 77 | `/api/debug/threads/{id}/live` | GET | Live logs |
 
 ### Dev-Only Endpoints (ENABLE_DANGEROUS_ENDPOINTS=true)
 
 | # | Endpoint | Method | Notes |
 |---|----------|--------|-------|
-| 42 | `/api/client/reset` | POST | Reset client data |
-| 43 | `/api/client/continue` | POST | Bypass dev prompt |
+| 78 | `/api/client/reset` | POST | Reset client data |
+| 79 | `/api/client/continue` | POST | Bypass dev prompt |
+| 80 | `/api/emails/test` | POST | Test SMTP config |
 
-**Total: 43 endpoints** (33 core + 8 debug + 2 dev-only)
+**Total: 80 documented endpoints** (65 core + 4 agent/chatkit + 8 debug + 3 dev-only)
 
 ---
 
@@ -765,6 +1431,11 @@ If you get this response, the backend is running correctly!
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `DEBUG_TRACE_ENABLED` | Enable debug endpoints | false |
-| `ENABLE_DANGEROUS_ENDPOINTS` | Enable dev-only reset endpoints | false |
-| `HIL_ALL_REPLIES` | Default HIL mode (can override via API) | false |
+| `ENV` | `dev` or `prod` — controls debug/test-data router registration | `prod` |
+| `DEBUG_TRACE_ENABLED` | Enable debug trace endpoints | `false` |
+| `ENABLE_DANGEROUS_ENDPOINTS` | Enable dev-only reset/continue endpoints | `false` |
+| `ENABLE_TEST_ENDPOINTS` | Enable test endpoints (deposit pay, email test) | `false` |
+| `HIL_ALL_REPLIES` | Default HIL mode (can override via API) | `false` |
+| `AUTH_ENABLED` | Require API key for all endpoints | `0` |
+| `EMAIL_PLAIN_TEXT` | Strip Markdown from client emails | `false` |
+| `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | localhost + lovable |
