@@ -1,44 +1,57 @@
 # Connecting the Prompts Editor to the Main Frontend
 
-This guide explains how to add the AI Message Customization feature to your OpenEvent setup.
+This guide explains how to add the AI Message Customization feature to the OpeneventGithub production frontend.
 
 ## Architecture Overview
 
 Your system has **two separate frontends**:
 
 ```
-┌─────────────────────────────────┐     ┌─────────────────────────────────┐
-│  Main Frontend (Lovable/Vite)   │     │  Admin Frontend (Next.js)       │
-│  OpeneventGithub repo           │     │  atelier-ai-frontend/           │
-│                                 │     │                                 │
-│  • Client-facing app            │     │  • Debug/admin tools            │
-│  • Uses Supabase directly       │     │  • Prompts editor at /admin/    │
-│  • No Python backend calls      │     │  • Connects to Python backend   │
-└─────────────────────────────────┘     └─────────────────────────────────┘
+┌─────────────────────────────────────┐     ┌─────────────────────────────────────┐
+│  Main Frontend (OpeneventGithub)    │     │  Test Frontend (atelier-ai-frontend)│
+│  /Users/nico/Documents/GitHub/      │     │  OpenEvent-AI/atelier-ai-frontend/  │
+│  OpeneventGithub/                   │     │                                     │
+│                                     │     │  • Debug/admin tools                │
+│  • Vite + React 18 + TypeScript     │     │  • Next.js 15                       │
+│  • shadcn-ui + Tailwind CSS         │     │  • Prompts editor at /admin/prompts │
+│  • Uses Supabase directly           │     │  • Connects to Python backend       │
+│  • React Query for state            │     │  • Used for local testing only      │
+└─────────────────────────────────────┘     └─────────────────────────────────────┘
                   │                                      │
                   │                                      │
                   ▼                                      ▼
           ┌─────────────┐                    ┌─────────────────────┐
           │  Supabase   │                    │  Python Backend     │
-          │  (Database) │◀───────────────────│  (FastAPI/Hostinger)│
+          │  (Database) │◄───────────────────│  (FastAPI/Hostinger)│
           └─────────────┘                    └─────────────────────┘
 ```
+
+## OpeneventGithub Frontend Tech Stack
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| React | 18.3.1 | UI framework |
+| TypeScript | 5.5.3 | Type safety |
+| Vite | 5.4.1 | Build tool (dev port 8080) |
+| shadcn-ui | Latest | UI components |
+| Tailwind CSS | 3.4.11 | Styling |
+| React Query | 5.90.2 | Server state management |
+| React Router DOM | 6.26.2 | Client routing |
+| React Hook Form | 7.53.0 | Form handling |
+| Zod | Latest | Validation |
 
 ## Two Integration Options
 
 ---
 
-## Option A: Link to Admin Frontend (Recommended - Simplest)
+## Option A: Link to Admin Frontend (Recommended for Quick Deploy)
 
-Deploy the admin frontend (`atelier-ai-frontend`) and link to it from your main app.
+Deploy the test frontend (`atelier-ai-frontend`) and link to it from your main app.
 
 ### Step 1: Deploy Admin Frontend
 
-The admin frontend is at `OpenEvent-AI/atelier-ai-frontend/`. Deploy it:
-
-**For Vercel:**
 ```bash
-cd atelier-ai-frontend
+cd OpenEvent-AI/atelier-ai-frontend
 vercel --prod
 ```
 
@@ -50,10 +63,13 @@ NEXT_PUBLIC_PROMPTS_EDITOR_ENABLED=true
 
 ### Step 2: Add Link in Main Settings
 
-In `OpeneventGithub/src/pages/PreferencesSettings.tsx`, add a card that links out:
+In `OpeneventGithub/src/pages/PreferencesSettings.tsx`, add a card:
 
 ```tsx
-// In the settings tabs, add:
+// Add import at top
+import { Sparkles, ExternalLink } from "lucide-react";
+
+// In the settings content area, add:
 <Card>
   <CardHeader>
     <CardTitle className="flex items-center gap-2">
@@ -79,42 +95,55 @@ In `OpeneventGithub/src/pages/PreferencesSettings.tsx`, add a card that links ou
 </Card>
 ```
 
-**That's it!** The prompts editor is already built in the admin frontend.
+---
+
+## Option B: Native Integration (Full Experience)
+
+Embed the prompts editor directly in OpeneventGithub. This provides the best UX.
+
+### File Locations Summary
+
+| What | Location in OpeneventGithub |
+|------|----------------------------|
+| New Page | `/src/pages/AIPromptsSetup.tsx` (create) |
+| API Client | `/src/lib/aiBackend.ts` (create) |
+| Custom Hook | `/src/hooks/useAIPrompts.ts` (create) |
+| Route Config | `/src/App.tsx` line ~120 |
+| Permission Config | `/src/lib/permissions/config.ts` line ~77 |
+| Sidebar (optional) | `/src/components/AppSidebar.tsx` line ~55 |
 
 ---
 
-## Option B: Embed in Main Frontend (More Work)
+### Step 1: Backend - Enable Feature Flag
 
-If you prefer everything in one app, add the prompts editor directly.
-
-### Quick Setup Steps
-
-### 1. Backend: Enable Feature Flag
-
-On your Hostinger server (or wherever the Python backend runs):
+On your Hostinger server:
 
 ```bash
-# Add to environment variables
+# Add to /opt/openevent/.env
 PROMPTS_EDITOR_ENABLED=true
 ```
 
-### 2. Frontend: Add Backend URL
+Then restart: `systemctl restart openevent`
 
-In `/Users/nico/Documents/GitHub/OpeneventGithub/.env`:
+---
+
+### Step 2: Frontend - Add Environment Variable
+
+In `OpeneventGithub/.env`:
 
 ```bash
-# Add this line - point to your Python backend
+# Point to your Python backend
 VITE_AI_BACKEND_URL=https://your-hostinger-backend.com
+
+# For local development:
+# VITE_AI_BACKEND_URL=http://localhost:8000
 ```
 
-For local development:
-```bash
-VITE_AI_BACKEND_URL=http://localhost:8000
-```
+---
 
-### 3. Frontend: Create API Client
+### Step 3: Create API Client
 
-Create a new file: `src/lib/aiBackend.ts`
+Create `/src/lib/aiBackend.ts`:
 
 ```typescript
 /**
@@ -124,12 +153,12 @@ Create a new file: `src/lib/aiBackend.ts`
 
 const AI_BACKEND_URL = import.meta.env.VITE_AI_BACKEND_URL || '';
 
-interface PromptConfig {
+export interface PromptConfig {
   system_prompt: string;
   step_prompts: Record<string, string>;
 }
 
-interface HistoryEntry {
+export interface HistoryEntry {
   ts: string;
   config: PromptConfig;
 }
@@ -137,7 +166,7 @@ interface HistoryEntry {
 export async function getPrompts(): Promise<PromptConfig> {
   const res = await fetch(`${AI_BACKEND_URL}/api/config/prompts`);
   if (!res.ok) {
-    if (res.status === 404) throw new Error('Prompts editor not enabled');
+    if (res.status === 404) throw new Error('Prompts editor not enabled on backend');
     throw new Error('Failed to load prompts');
   }
   return res.json();
@@ -171,67 +200,119 @@ export function isAiBackendConfigured(): boolean {
 }
 ```
 
-### 4. Frontend: Add to Settings Page
+---
 
-**Option A: Add as new tab in PreferencesSettings.tsx**
+### Step 4: Create React Query Hook
 
-In the existing tabs, add a new "AI Style" tab:
+Create `/src/hooks/useAIPrompts.ts`:
 
-```tsx
-// At top of file, add import
-import { AIStyleTab } from '@/components/settings/AIStyleTab';
+```typescript
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getPrompts, savePrompts, getPromptsHistory, revertPrompts, PromptConfig } from '@/lib/aiBackend';
+import { useToast } from '@/hooks/use-toast';
 
-// In the tabs list (around line 60), add:
-const canViewAIStyle = hasAtLeastRole('admin');
+export function useAIPrompts() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-// In TabsList (around line 200), add:
-{canViewAIStyle && (
-  <TabsTrigger value="ai-style">
-    <Sparkles className="h-4 w-4 mr-2" />
-    AI Style
-  </TabsTrigger>
-)}
+  const promptsQuery = useQuery({
+    queryKey: ['ai-prompts'],
+    queryFn: getPrompts,
+    staleTime: 30 * 1000, // 30 seconds (matches backend cache)
+    retry: 1,
+  });
 
-// In TabsContent area, add:
-{canViewAIStyle && (
-  <TabsContent value="ai-style">
-    <AIStyleTab />
-  </TabsContent>
-)}
+  const historyQuery = useQuery({
+    queryKey: ['ai-prompts-history'],
+    queryFn: getPromptsHistory,
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: savePrompts,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ai-prompts'] });
+      queryClient.invalidateQueries({ queryKey: ['ai-prompts-history'] });
+      toast({
+        title: 'Saved',
+        description: 'Changes will take effect within 30 seconds.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const revertMutation = useMutation({
+    mutationFn: revertPrompts,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ai-prompts'] });
+      queryClient.invalidateQueries({ queryKey: ['ai-prompts-history'] });
+      toast({
+        title: 'Restored',
+        description: 'Previous version restored.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  return {
+    prompts: promptsQuery.data,
+    isLoading: promptsQuery.isLoading,
+    error: promptsQuery.error,
+    history: historyQuery.data,
+    save: saveMutation.mutate,
+    isSaving: saveMutation.isPending,
+    revert: revertMutation.mutate,
+    isReverting: revertMutation.isPending,
+  };
+}
 ```
 
-**Option B: New standalone page (simpler)**
+---
 
-Add a new route in `App.tsx`:
-```tsx
-import AIStyleSettings from "./pages/AIStyleSettings";
+### Step 5: Add Route Permission
 
-// In routes:
-<Route path="/settings/ai-style" element={
-  <ProtectedRoute>
-    <Layout>
-      <AIStyleSettings />
-    </Layout>
-  </ProtectedRoute>
-} />
+In `/src/lib/permissions/config.ts`, add to the routes array (~line 77):
+
+```typescript
+const routes: RoutePermission[] = [
+  // ... existing routes
+  { path: '/setup/ai-prompts', allowedRoles: ['owner', 'admin'] },
+];
 ```
 
-### 5. Frontend: Create the Component
+---
 
-Create `src/components/settings/AIStyleTab.tsx`:
+### Step 6: Create the Page Component
+
+Create `/src/pages/AIPromptsSetup.tsx`:
 
 ```tsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Save, RotateCcw, Info } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { getPrompts, savePrompts, getPromptsHistory, revertPrompts, isAiBackendConfigured } from '@/lib/aiBackend';
+import { Loader2, Save, RotateCcw, Info, History } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useAIPrompts } from '@/hooks/useAIPrompts';
+import { isAiBackendConfigured, PromptConfig } from '@/lib/aiBackend';
 
-const STEP_INFO = {
+const STEP_INFO: Record<string, { label: string; icon: string; hint: string }> = {
   '2': { label: 'Date Confirmation', icon: '📅', hint: 'How dates are presented to clients' },
   '3': { label: 'Room Availability', icon: '🏠', hint: 'How rooms are recommended' },
   '4': { label: 'Offer', icon: '💰', hint: 'How quotes are presented' },
@@ -239,58 +320,44 @@ const STEP_INFO = {
   '7': { label: 'Confirmation', icon: '✅', hint: 'How final confirmations are communicated' },
 };
 
-export function AIStyleTab() {
-  const [config, setConfig] = useState<any>(null);
+const AIPromptsSetup = () => {
+  const { hasAtLeastRole, isLoading: permLoading } = usePermissions();
+  const { prompts, isLoading, error, save, isSaving, history, revert } = useAIPrompts();
+  const [localConfig, setLocalConfig] = useState<PromptConfig | null>(null);
   const [activeStep, setActiveStep] = useState('2');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
+  const [showHistory, setShowHistory] = useState(false);
 
-  const loadConfig = useCallback(async () => {
-    if (!isAiBackendConfigured()) {
-      setError('AI backend not configured. Add VITE_AI_BACKEND_URL to .env');
-      setLoading(false);
-      return;
-    }
-    try {
-      const data = await getPrompts();
-      setConfig(data);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Sync prompts to local state for editing
   useEffect(() => {
-    loadConfig();
-  }, [loadConfig]);
-
-  const handleSave = async () => {
-    if (!config) return;
-    setSaving(true);
-    try {
-      await savePrompts(config);
-      toast({ title: 'Saved', description: 'Changes will take effect within 30 seconds.' });
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
-    } finally {
-      setSaving(false);
+    if (prompts) {
+      setLocalConfig(prompts);
     }
-  };
+  }, [prompts]);
 
-  const handleChange = (step: string, value: string) => {
-    setConfig((prev: any) => ({
-      ...prev,
-      step_prompts: { ...prev.step_prompts, [step]: value },
-    }));
-  };
+  // Permission check
+  if (!permLoading && !hasAtLeastRole('admin')) {
+    return <Navigate to="/access-denied" replace />;
+  }
 
-  if (loading) {
+  // Backend not configured
+  if (!isAiBackendConfigured()) {
     return (
-      <Card>
+      <Card className="max-w-2xl mx-auto mt-8">
+        <CardContent className="py-8">
+          <Alert variant="destructive">
+            <AlertDescription>
+              AI backend not configured. Add <code>VITE_AI_BACKEND_URL</code> to your .env file.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Loading state
+  if (isLoading || permLoading) {
+    return (
+      <Card className="max-w-2xl mx-auto mt-8">
         <CardContent className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin" />
         </CardContent>
@@ -298,142 +365,285 @@ export function AIStyleTab() {
     );
   }
 
+  // Error state
   if (error) {
     return (
-      <Card>
+      <Card className="max-w-2xl mx-auto mt-8">
         <CardContent className="py-8">
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{(error as Error).message}</AlertDescription>
           </Alert>
         </CardContent>
       </Card>
     );
   }
 
+  const handleChange = (step: string, value: string) => {
+    if (!localConfig) return;
+    setLocalConfig({
+      ...localConfig,
+      step_prompts: { ...localConfig.step_prompts, [step]: value },
+    });
+  };
+
+  const handleSave = () => {
+    if (localConfig) {
+      save(localConfig);
+    }
+  };
+
+  const handleReset = () => {
+    if (prompts) {
+      setLocalConfig(prompts);
+    }
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>AI Message Style</CardTitle>
-        <CardDescription>
-          Customize how the AI writes to your clients. Changes affect tone and phrasing, not the actual information shown.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription>
-            You can change how the AI phrases things, but dates, prices, and room names always stay accurate.
-          </AlertDescription>
-        </Alert>
-
-        <Tabs value={activeStep} onValueChange={setActiveStep}>
-          <TabsList className="grid grid-cols-5 w-full">
-            {Object.entries(STEP_INFO).map(([key, info]) => (
-              <TabsTrigger key={key} value={key} className="text-xs">
-                {info.icon} {info.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          {Object.entries(STEP_INFO).map(([key, info]) => (
-            <TabsContent key={key} value={key} className="space-y-3">
-              <p className="text-sm text-muted-foreground">{info.hint}</p>
-              <Textarea
-                value={config?.step_prompts?.[key] || ''}
-                onChange={(e) => handleChange(key, e.target.value)}
-                rows={6}
-                placeholder={`Enter guidance for ${info.label}...`}
-              />
-            </TabsContent>
-          ))}
-        </Tabs>
-
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={loadConfig}>
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Reset
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-            Save Changes
-          </Button>
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">AI Message Style</h1>
+          <p className="text-muted-foreground">
+            Customize how the AI writes to your clients. Changes affect tone, not data accuracy.
+          </p>
         </div>
-      </CardContent>
-    </Card>
+        <Button variant="outline" onClick={() => setShowHistory(!showHistory)}>
+          <History className="h-4 w-4 mr-2" />
+          {showHistory ? 'Hide' : 'Show'} History
+        </Button>
+      </div>
+
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertDescription>
+          You can change how the AI phrases things, but dates, prices, and room names always stay accurate.
+        </AlertDescription>
+      </Alert>
+
+      {showHistory && history && history.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Version History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {history.slice(0, 5).map((entry, idx) => (
+                <div key={idx} className="flex items-center justify-between p-2 bg-muted rounded">
+                  <span className="text-sm">{new Date(entry.ts).toLocaleString()}</span>
+                  <Button size="sm" variant="ghost" onClick={() => revert(idx)}>
+                    Restore
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Step-by-Step Guidance</CardTitle>
+          <CardDescription>
+            Select a workflow step and customize the AI's communication style.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Tabs value={activeStep} onValueChange={setActiveStep}>
+            <TabsList className="grid grid-cols-5 w-full">
+              {Object.entries(STEP_INFO).map(([key, info]) => (
+                <TabsTrigger key={key} value={key} className="text-xs">
+                  {info.icon} {info.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            {Object.entries(STEP_INFO).map(([key, info]) => (
+              <TabsContent key={key} value={key} className="space-y-3">
+                <p className="text-sm text-muted-foreground">{info.hint}</p>
+                <Textarea
+                  value={localConfig?.step_prompts?.[key] || ''}
+                  onChange={(e) => handleChange(key, e.target.value)}
+                  rows={6}
+                  placeholder={`Enter guidance for ${info.label}...`}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {(localConfig?.step_prompts?.[key] || '').length} characters
+                </p>
+              </TabsContent>
+            ))}
+          </Tabs>
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={handleReset}>
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reset
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              Save Changes
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
-}
+};
+
+export default AIPromptsSetup;
 ```
+
+---
+
+### Step 7: Add Route to App.tsx
+
+In `/src/App.tsx` (~line 120, in the routes section):
+
+```tsx
+import AIPromptsSetup from "./pages/AIPromptsSetup";
+
+// Add inside <Routes>:
+<Route path="/setup/ai-prompts" element={
+  <ProtectedRoute>
+    <Layout>
+      <AIPromptsSetup />
+    </Layout>
+  </ProtectedRoute>
+} />
+```
+
+---
+
+### Step 8: Add to Sidebar (Optional)
+
+In `/src/components/AppSidebar.tsx` (~line 55), add to `allSetupItems`:
+
+```tsx
+import { Sparkles } from "lucide-react";
+
+const allSetupItems = [
+  // ... existing items
+  { title: "AI Prompts", url: "/setup/ai-prompts", icon: Sparkles },
+];
+```
+
+---
 
 ## CORS Configuration
 
-If the frontend and backend are on different domains, enable CORS on the backend.
+Backend CORS must allow the frontend domain. In `/opt/openevent/.env`:
 
-In `app.py` (Python backend), ensure CORS is configured:
-
-```python
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite dev
-        "https://your-frontend-domain.com",  # Production
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+```bash
+ALLOWED_ORIGINS=https://lovable.dev,https://*.lovable.app,https://your-production-domain.com
 ```
+
+---
 
 ## Environment Variables Summary
 
 ### Backend (Python/Hostinger)
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `PROMPTS_EDITOR_ENABLED` | `true` | Enables the API endpoints |
+| `PROMPTS_EDITOR_ENABLED` | `true` | Enables API endpoints |
+| `ALLOWED_ORIGINS` | `https://your-domain.com` | CORS for frontend |
 
-### Frontend (Lovable/Vercel)
+### Frontend (OpeneventGithub)
 | Variable | Value | Purpose |
 |----------|-------|---------|
 | `VITE_AI_BACKEND_URL` | `https://your-backend.com` | Points to Python backend |
 
+---
+
 ## Deployment Checklist
 
-- [ ] Backend: Set `PROMPTS_EDITOR_ENABLED=true`
-- [ ] Backend: Verify CORS allows frontend domain
-- [ ] Backend: Test `/api/config/prompts` returns 200
-- [ ] Frontend: Add `VITE_AI_BACKEND_URL` to .env
-- [ ] Frontend: Create `src/lib/aiBackend.ts`
-- [ ] Frontend: Add AIStyleTab component
-- [ ] Frontend: Wire into settings page or create new route
-- [ ] Test: Can load prompts
-- [ ] Test: Can save changes
-- [ ] Test: Changes appear in AI responses within 30 seconds
+### Backend
+- [ ] `PROMPTS_EDITOR_ENABLED=true` in .env
+- [ ] CORS allows frontend domain
+- [ ] Test: `curl https://backend/api/config/prompts` returns 200
 
-## Admin-Only Access
+### Frontend
+- [ ] `VITE_AI_BACKEND_URL` set in .env
+- [ ] Created `/src/lib/aiBackend.ts`
+- [ ] Created `/src/hooks/useAIPrompts.ts`
+- [ ] Created `/src/pages/AIPromptsSetup.tsx`
+- [ ] Added route to `/src/App.tsx`
+- [ ] Added permission to `/src/lib/permissions/config.ts`
+- [ ] (Optional) Added sidebar item
 
-The component should only be visible to admins. The example code uses:
-```tsx
-const canViewAIStyle = hasAtLeastRole('admin');
+### Testing
+- [ ] Can load prompts as admin
+- [ ] Cannot access as non-admin (redirects to /access-denied)
+- [ ] Can save changes
+- [ ] Changes appear in AI responses within 30 seconds
+- [ ] Version history loads
+- [ ] Can restore previous version
+
+---
+
+## Testing Environment Toggle
+
+To keep both environments working:
+
+### Local Development (Test Frontend)
+```bash
+# In OpenEvent-AI/atelier-ai-frontend/
+npm run dev  # Runs on localhost:3000
+```
+Backend auto-connects to `http://localhost:8000`
+
+### Local Development (Production Frontend)
+```bash
+# In OpeneventGithub/
+npm run dev  # Runs on localhost:8080
+```
+Uses `VITE_AI_BACKEND_URL` from `.env` (can point to localhost:8000 or production)
+
+### Toggle Script
+
+Create `OpeneventGithub/scripts/toggle-backend.sh`:
+```bash
+#!/bin/bash
+# Toggle between local and production backend
+
+if [ "$1" = "local" ]; then
+  sed -i '' 's|^VITE_AI_BACKEND_URL=.*|VITE_AI_BACKEND_URL=http://localhost:8000|' .env
+  echo "Switched to LOCAL backend"
+elif [ "$1" = "prod" ]; then
+  sed -i '' 's|^VITE_AI_BACKEND_URL=.*|VITE_AI_BACKEND_URL=https://your-hostinger-backend.com|' .env
+  echo "Switched to PRODUCTION backend"
+else
+  echo "Usage: ./scripts/toggle-backend.sh [local|prod]"
+fi
 ```
 
-This uses the existing `usePermissions` hook from the frontend.
+---
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
 | 404 on `/api/config/prompts` | Enable `PROMPTS_EDITOR_ENABLED=true` on backend |
-| CORS error | Add frontend domain to backend CORS config |
+| CORS error | Add frontend domain to `ALLOWED_ORIGINS` |
 | Changes not appearing | Wait 30 seconds (cache TTL) or restart backend |
 | "AI backend not configured" | Add `VITE_AI_BACKEND_URL` to frontend .env |
+| "Access denied" | User must have admin or owner role |
+| Route not found | Ensure route is added to App.tsx inside `<Routes>` |
 
-## Alternative: Embed in atelier-ai-frontend
+---
 
-If you prefer to keep the prompts editor in the `atelier-ai-frontend` subfolder (where it already exists), you can:
+## Key OpeneventGithub Patterns Used
 
-1. Deploy `atelier-ai-frontend` as a separate app
-2. Link to it from the main settings page with `target="_blank"`
-3. Use the existing `/admin/prompts` route
+This integration follows existing patterns in the codebase:
 
-This keeps the code separate but requires deploying two frontend apps.
+| Pattern | Example From | Applied To |
+|---------|--------------|------------|
+| React Query hooks | `useEmails.ts` | `useAIPrompts.ts` |
+| Permission checks | `usePermissions()` | Admin-only access |
+| Route guards | `ProtectedRoute` | Page protection |
+| Toast notifications | `useToast()` | Save/error feedback |
+| Card-based layout | `PreferencesSettings.tsx` | Page structure |
+| Tabs component | Settings tabs | Step selection |
+| Environment variables | `VITE_SUPABASE_URL` | `VITE_AI_BACKEND_URL` |

@@ -18,10 +18,18 @@ Deploy the OpenEvent AI backend to Hostinger VPS, then connect from Lovable fron
 ### Files in this folder:
 ```
 deploy/
-├── README.md           ← You are here (setup guide)
-├── API_TESTS.md        ← All endpoints with curl examples
-├── setup-vps.sh        ← Run this on VPS to install everything
-└── openevent.service   ← systemd service configuration
+├── README.md                              ← You are here (setup guide)
+├── FRONTEND_API_INTEGRATION.md            ← 🆕 COMPLETE frontend integration guide (80+ endpoints)
+├── API_TESTS.md                           ← All endpoints with curl examples
+├── FRONTEND_PROMPTS_EDITOR_CONNECTION.md  ← Connect prompts editor to OpeneventGithub
+├── PROMPTS_EDITOR_INTEGRATION.md          ← Feature overview for prompts editor
+├── setup-vps.sh                           ← Run this on VPS to install everything
+├── openevent.service                      ← systemd service configuration
+├── nginx-openevent.conf                   ← Nginx reverse proxy config
+└── update.sh                              ← Quick update script
+
+See also:
+├── ../docs/integration/BACKEND_TODO_FOR_FRONTEND.md  ← Backend work needed for full integration
 ```
 
 ---
@@ -467,8 +475,11 @@ curl -X POST http://localhost:8000/api/agent/chatkit/respond \
 
 There are **two different frontends** that interact with this backend:
 
-#### 1. Main OpenEvent Application (Production)
-This is the full SaaS event management app described in `docs/integration/frontend_and_database/event_requests_and_setup_page/reports_from_frontend/FRONTEND_REFERENCE.md`.
+#### 1. Main OpenEvent Application (Production) - OpeneventGithub
+
+**Location:** `/Users/nico/Documents/GitHub/OpeneventGithub/`
+
+**Tech stack:** React 18 + TypeScript + Vite + shadcn-ui + React Query + Supabase
 
 **What it includes:**
 - `/inbox` - Email management (IMAP/Gmail integration)
@@ -477,10 +488,16 @@ This is the full SaaS event management app described in `docs/integration/fronte
 - `/offers` - Quote generation
 - `/tasks` - Task/HIL management
 - `/setup/*` - Venue, rooms, products configuration
+- `/settings` - User preferences, team management
 
 **API usage:** Uses `/api/send-message` for AI email processing. Email arrives in Inbox → AI processes → Manager reviews via Tasks → Response sent.
 
+**Integration docs:** See [FRONTEND_PROMPTS_EDITOR_CONNECTION.md](./FRONTEND_PROMPTS_EDITOR_CONNECTION.md) for connecting new features.
+
 #### 2. Test/Demo Frontend (`atelier-ai-frontend/`)
+
+**Location:** `OpenEvent-AI/atelier-ai-frontend/`
+
 This is a **test harness** in this repository for backend development. It's NOT the production frontend.
 
 | Page | Purpose | API Used |
