@@ -246,6 +246,9 @@ WORKFLOW_ACTIVITIES = {
     "availability_checked": ("🔍", "Availability Checked", "{date} - {result}"),
     "capacity_checked": ("🔍", "Capacity Checked", "{room} - {result}"),
     "pricing_calculated": ("🔍", "Pricing Calculated", "{details}"),
+
+    # Time validation (detailed)
+    "time_outside_hours": ("🕐", "Time Outside Operating Hours", "{time} ({issue})"),
 }
 
 

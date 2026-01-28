@@ -195,6 +195,29 @@ def process(state: WorkflowState) -> GroupResult:
         state.extras["general_qna_detected"] = True
         state.extras["_has_qna_types"] = True
 
+    # [EARLY VALIDATION] Time slot validation against operating hours
+    # Use unified detection times (LLM-extracted) - never re-parse from text
+    from workflows.common.time_validation import validate_event_times
+    time_validation = validate_event_times(
+        start_time=unified_detection.start_time if unified_detection else None,
+        end_time=unified_detection.end_time if unified_detection else None,
+        is_site_visit=False,
+    )
+    if not time_validation.is_valid:
+        logger.info(
+            "[Step1][TIME_VALIDATION] Times outside hours: %s (start=%s, end=%s)",
+            time_validation.issue, time_validation.start_time, time_validation.end_time
+        )
+        state.extras["time_warning"] = time_validation.friendly_message
+        state.extras["time_warning_issue"] = time_validation.issue
+        # Persist time warning to event_entry for traceability
+        if linked_event is not None:
+            linked_event.setdefault("time_validation", {})
+            linked_event["time_validation"]["issue"] = time_validation.issue
+            linked_event["time_validation"]["warning"] = time_validation.friendly_message
+            linked_event["time_validation"]["start_time"] = time_validation.start_time
+            linked_event["time_validation"]["end_time"] = time_validation.end_time
+
     # [EARLY DETECTION] Room choice detection
     room_result = _detect_early_room_choice(body_text, linked_event, unified_detection)
     if room_result.room_name:

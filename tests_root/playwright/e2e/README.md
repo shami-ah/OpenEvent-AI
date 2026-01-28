@@ -32,7 +32,7 @@ Tests are organized in priority order. If a higher-tier test fails, lower-tier t
 
 ---
 
-### 🟡 TIER 3: FEATURES (07-10)
+### 🟡 TIER 3: FEATURES (07-10, 16)
 **If these fail: Specific features don't work**
 
 | Folder | Tests | What Breaks |
@@ -41,6 +41,7 @@ Tests are organized in priority order. If a higher-tier test fails, lower-tier t
 | `08_feature_deposit` | 2 | Deposit calculation wrong |
 | `09_feature_persistence` | 3 | Billing/preferences not saved |
 | `10_feature_hil` | 3 | Manager requests don't route |
+| `16_feature_time_validation` | 1 | Times outside operating hours not warned |
 
 **Feature completeness tests.**
 
@@ -116,7 +117,7 @@ Tests are designed for Claude MCP Playwright execution:
 |------|--------|-------|-------|
 | Critical | 01-03 | Foundation | 7 |
 | Core | 04-06 | Workflow | 10 |
-| Features | 07-10 | Completeness | 10 |
+| Features | 07-10, 16 | Completeness | 11 |
 | Input | 11-13 | Diversity | 8 |
 | UX | 14-15 | Polish | 6 |
-| **Total** | | | **41** |
+| **Total** | | | **42** |

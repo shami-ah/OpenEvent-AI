@@ -786,7 +786,22 @@ def process(state: WorkflowState) -> GroupResult:
 
     # Combine all prefixes with verbalized intro and structured offer
     combined_prefix = room_confirmation_prefix + sourcing_prefix
-    offer_body_markdown = combined_prefix + verbalized_intro + "\n\n" + "\n".join(summary_lines)
+
+    # [TIME WARNING] Include operating hours warning if times are outside venue hours
+    time_warning = state.extras.get("time_warning")
+    time_warning_suffix = ""
+    if time_warning:
+        # Log activity for visibility
+        from activity.persistence import log_workflow_activity
+        log_workflow_activity(
+            event_entry, "time_outside_hours",
+            time=f"{state.user_info.get('start_time', '')} - {state.user_info.get('end_time', '')}",
+            issue=state.extras.get("time_warning_issue", "outside_hours"),
+        )
+        time_warning_suffix = f"\n\n---\n**Note:** {time_warning}"
+        logger.info("[Step4][TIME_WARNING] Including operating hours warning in offer")
+
+    offer_body_markdown = combined_prefix + verbalized_intro + "\n\n" + "\n".join(summary_lines) + time_warning_suffix
 
     draft_message = {
         "body_markdown": offer_body_markdown,
