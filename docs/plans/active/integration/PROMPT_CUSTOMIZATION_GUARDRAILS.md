@@ -1,91 +1,149 @@
-# Prompt Customization Guardrails (Tone/Format Only)
+# Prompt Customization Guardrails
 
-## Goal
-Allow a non-technical manager to adjust AI tone, style, and formatting across workflow steps without changing functional behavior (routing, extraction, gating, or facts).
+## Overview
 
-## Scope (Safe to change)
-These are the ONLY recommended surfaces for edits. They influence tone/format and do not alter workflow logic.
+This document defines the safety boundaries for the AI message customization feature. The goal is to let non-technical event managers adjust AI communication style without breaking workflow functionality or data accuracy.
 
-- Config endpoints:
-  - `GET/POST /api/config/prompts`
-  - `GET /api/config/prompts/history`
-  - `POST /api/config/prompts/revert/{index}`
-- Verbalizer defaults (only if needed for initial seed values):
-  - `ux/universal_verbalizer.py` (`_SYSTEM_PROMPT_BODY`, `STEP_PROMPTS`)
-- Frontend editor (already wired):
-  - `atelier-ai-frontend/app/components/admin/PromptsEditor.tsx`
-  - `atelier-ai-frontend/app/admin/prompts/page.tsx`
+## The Golden Rule
 
-### What these change
-- Global system prompt for the universal verbalizer (tone, banned words, formatting rules).
-- Per-step guidance for Steps 2/3/4/5/7 (tone and structure suggestions only).
+**Prompts control HOW the AI says things, not WHAT it says.**
 
-### What these do NOT change
-- Extraction/intent/entity logic (Gemini/OpenAI parsing).
-- Business rules (dates, availability, pricing, deposits, site visits).
-- Structured Q&A tables or deterministic workflow copy.
+- Dates, prices, and room names are always injected from the system
+- Fact verification catches any LLM attempts to alter or invent data
+- Workflow logic (step progression, gating, routing) is unaffected
 
+## What Managers CAN Safely Change
 
-## Avoid Changing (High Risk)
-Editing these can change behavior, break structured outputs, or violate fact-preservation safeguards.
+### Per-Step Customization
 
-- Q&A pipeline (structured responses and routing):
-  - `workflows/qna/verbalizer.py`
-  - `workflows/qna/router.py`
-  - `workflows/qna/templates.py`
-  - `workflows/common/general_qna.py`
-- Safety sandwich (fact verification for offers/rooms):
-  - `llm/verbalizer_agent.py`
-  - `ux/verbalizer_safety.py`
-  - `ux/verbalizer_payloads.py`
-- Core message assembly and footers:
-  - `workflows/common/prompts.py`
-  - `workflows/common/types.py`
-- Step handlers and gating prompts (logic + copy interleaved):
-  - `workflows/steps/**/trigger/*.py`
-  - `workflows/common/billing_gate.py`
-  - `workflows/common/site_visit_handler.py`
+| Step | Safe to Change | Example |
+|------|---------------|---------|
+| **Step 2: Date Confirmation** | Greeting style, how options are listed, question phrasing | "List dates briefly, ask which works best" |
+| **Step 3: Room Availability** | Recommendation wording, comparison style, call-to-action | "Lead with a clear recommendation, explain why" |
+| **Step 4: Offer** | Intro framing, value summary tone, confirmation question | "Keep it simple, end with 'Ready to confirm?'" |
+| **Step 5: Negotiation** | Acceptance/decline tone, how next steps are communicated | "Acknowledge briefly, state next step clearly" |
+| **Step 7: Confirmation** | Celebration tone, how admin details are requested | "Celebrate briefly, list steps calmly" |
 
+### Global Style (System Prompt)
 
-## Quick Implementation Plan (Low Risk)
-1) Expose the existing Prompts Editor in the main frontend.
-   - Reuse `PromptsEditor` component or route `/admin/prompts`.
-   - Set `NEXT_PUBLIC_BACKEND_BASE` to the Hostinger backend URL.
-2) Add auth/role guard to the page + API calls.
-   - Enforce admin-only access server-side.
-3) Keep defaults intact; store only overrides in the DB.
-   - This preserves functional behavior while allowing tone tweaks.
-4) If backend runs on Vercel:
-   - Persist `config.prompts` to a durable store (Supabase) instead of `/tmp/events_database.json`.
+- Communication style (formal vs friendly)
+- Paragraph length preferences
+- Banned words or phrases ("Amazing!", "Delve", etc.)
+- Formatting preferences (bold usage, bullet points)
 
+## What Managers CANNOT Change
 
-## Editing Rules for Managers (Safe Policy)
-- Allowed: tone, phrasing, formatting guidance, banned words list, greeting style.
-- Not allowed: any instruction that changes what facts to include, how to calculate, or which dates/rooms/prices to show.
-- Never remove these hard rules from the system prompt:
-  - Dates/prices/room names/units must be preserved exactly.
-  - Do not invent facts.
-  - Do not change numeric values or units.
+These are protected by system design:
 
+1. **Hard Facts** - Dates, prices, room names, participant counts
+2. **Product Units** - "per person" vs "per event" (verified by fact checker)
+3. **Workflow Logic** - Step progression, gating, routing decisions
+4. **Detection/Extraction** - How client messages are interpreted
+5. **Structured Content** - Q&A tables, INFO blocks, NEXT STEP markers
+
+## Technical Safeguards
+
+### Fact Verification (`_verify_facts`)
+
+After every LLM verbalization:
+1. All dates from context must appear in output
+2. All prices must appear with correct amounts
+3. All room names must appear
+4. Product units cannot be swapped
+5. Invented dates/amounts are detected and rejected
+
+### Prompt Isolation
+
+The customizable prompts only affect:
+- `ux/universal_verbalizer.py` → `_build_prompt()`
+- Messages going through `verbalize_message()` or `verbalize_step_message()`
+
+They do NOT affect:
+- `workflows/qna/verbalizer.py` - Structured Q&A
+- `llm/verbalizer_agent.py` - Safety sandwich
+- `detection/*` - Intent/entity extraction
+- `workflows/steps/**/trigger/*.py` - Step handler logic
+
+### Cache TTL
+
+Prompts are cached for 30 seconds. Changes take effect within this window without requiring a restart.
+
+## Example Safe Guidance
+
+### Step 2: Date Confirmation
+```
+Keep it concise. Acknowledge the request in one line, then list dates as
+clear options. Ask directly which works best.
+```
+
+### Step 3: Room Availability
+```
+Lead with a clear recommendation and explain why it fits. Compare 1-2
+alternatives briefly. End with a direct question.
+```
+
+### Step 4: Offer
+```
+Open with a short intro, summarize the offer in plain language.
+End with "Ready to confirm, or would you like to adjust anything?"
+```
+
+### Step 5: Negotiation
+```
+Acknowledge their decision in one sentence. Clearly state what happens
+next (manager review, deposit, etc.).
+```
+
+### Step 7: Confirmation
+```
+Celebrate briefly but professionally. List remaining admin steps in a
+calm, checklist-style format.
+```
+
+## Example UNSAFE Guidance (Don't Do This)
+
+```
+❌ BAD: "Always show the cheapest option first"
+   (Changes what information is shown)
+
+❌ BAD: "Round all prices to the nearest hundred"
+   (Alters factual data)
+
+❌ BAD: "If the client seems uncertain, suggest a site visit"
+   (Adds conditional logic the AI shouldn't control)
+
+❌ BAD: "Don't mention the deposit requirement"
+   (Removes required information)
+```
 
 ## Risk Checklist (Before Enabling)
-- [ ] Confirm edits are only stored via `/api/config/prompts`.
-- [ ] Confirm no changes in Q&A or safety-sandwich prompts.
-- [ ] Confirm caching TTL (30s) is acceptable or reduced for faster iteration.
-- [ ] Confirm prompt history + revert works in staging.
-- [ ] Confirm persistence is durable (non-ephemeral storage).
 
+- [ ] Both feature flags enabled (`PROMPTS_EDITOR_ENABLED`, `NEXT_PUBLIC_PROMPTS_EDITOR_ENABLED`)
+- [ ] Admin authentication guard in place
+- [ ] Version history tested in staging
+- [ ] Durable storage confirmed (not just `/tmp` on Vercel)
+- [ ] Manager understands safe vs unsafe changes
 
-## Validation (Fast Sanity Checks)
-- Run one deterministic flow per step (2,3,4,5,7) and confirm:
-  - Dates/prices/room names preserved.
-  - No routing changes or missing prompts.
-  - Tone changes are visible.
-- Use `/api/config/prompts/history` to confirm versioning and quick rollback.
+## Rollback
 
+If AI responses become problematic:
 
-## Rollback Plan
-- Revert to previous prompt version via:
-  - `POST /api/config/prompts/revert/{index}`
-- If needed, delete overrides in DB: `config.prompts`.
+1. **UI**: Click "Restore" on a previous version in history
+2. **API**: `POST /api/config/prompts/revert/0`
+3. **Emergency**: Delete `config.prompts` from database
 
+## Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `ux/universal_verbalizer.py` | Loads prompts, applies to verbalization |
+| `api/routes/config.py` | API endpoints for CRUD |
+| `PromptsEditor.tsx` | Frontend editor UI |
+| `page.tsx` (admin/prompts) | Page wrapper with feature flag check |
+
+## Future Considerations
+
+- **Preview feature**: Show sample output before saving
+- **A/B testing**: Compare different prompt styles
+- **Per-client customization**: Different tones for different client types
+- **Analytics**: Track which prompts perform best
