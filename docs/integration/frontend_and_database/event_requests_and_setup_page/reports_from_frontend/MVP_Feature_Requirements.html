@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MVP Feature Requirements - OpenEvent AI Assistant</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #1a1a1a;
+            border-bottom: 2px solid #007AFF;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #007AFF;
+            margin-top: 40px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+        h3 {
+            color: #333;
+            margin-top: 25px;
+        }
+        h4 {
+            color: #555;
+            margin-top: 20px;
+        }
+        .subtitle {
+            text-align: center;
+            font-style: italic;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .meta {
+            text-align: center;
+            font-size: 0.9em;
+            color: #888;
+            margin-bottom: 30px;
+        }
+        ul {
+            margin-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        strong {
+            color: #1a1a1a;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f5f5f7;
+            font-weight: 600;
+        }
+        .note {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+        .important {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+        .section {
+            background-color: #f5f5f7;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 30px 0;
+        }
+        .phase {
+            background-color: #e8f4f8;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .phase-title {
+            font-weight: bold;
+            color: #007AFF;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>MVP Feature Requirements</h1>
+<p class="subtitle">OpenEvent AI Assistant - Frontend Specification</p>
+<p class="meta">Date: January 12, 2026 | For: Design and Web Team</p>
+
+<hr>
+
+<h2>What This Application Does</h2>
+<p>The AI Assistant helps event managers handle client bookings via email. When a client sends an email:</p>
+<ol>
+    <li>The AI reads the email and drafts a response</li>
+    <li>The manager reviews and approves (or edits) before sending</li>
+    <li>The conversation continues until the offer is confirmed</li>
+</ol>
+<p>The manager sees this integrated into their email inbox - not as a separate chat app.</p>
+
+<hr>
+
+<h2>Section 1: Core Features (Must Have)</h2>
+
+<h3>1.1 Email Conversation View</h3>
+<p>Display the email conversation between the manager's venue and the client.</p>
+<ul>
+    <li>Show messages in order (oldest to newest)</li>
+    <li>Each message shows: who sent it, when, and the content</li>
+    <li>Clear visual difference between:
+        <ul>
+            <li><strong>Client messages</strong> (received emails)</li>
+            <li><strong>AI drafts</strong> (waiting for manager approval - NOT sent yet)</li>
+            <li><strong>Sent messages</strong> (approved and delivered to client)</li>
+        </ul>
+    </li>
+</ul>
+
+<h3>1.2 AI Agent Section (Manager Approves AI Replies)</h3>
+<p>When the AI creates a response to a client email, the manager must review it before sending.</p>
+<p><strong>Features needed:</strong></p>
+<ul>
+    <li><strong>Draft display:</strong> Show the AI's draft message clearly marked as "Draft - Awaiting Approval"</li>
+    <li><strong>Edit field:</strong> Manager can modify the text before sending</li>
+    <li><strong>Approve & Send button:</strong> Send the message to the client</li>
+    <li><strong>Reject button:</strong> Discard the draft (AI will try again or manager writes own response)</li>
+    <li><strong>Notes field (optional):</strong> Internal notes, not visible to client</li>
+</ul>
+<div class="note">
+    <strong>Important:</strong> Every AI-generated message goes through this approval before the client sees it.
+</div>
+
+<h3>1.3 Client Review Section (Manager Handles Special Cases)</h3>
+<p>Some client messages need manager attention beyond just approving AI replies.</p>
+
+<h4>1.3.1 Special Product Requests</h4>
+<p>When a client asks for something not in the standard catalog (e.g., "We need a red carpet"):</p>
+<ul>
+    <li>Show what the client requested</li>
+    <li><strong>Product name field:</strong> Manager enters the product they found</li>
+    <li><strong>Price field (CHF):</strong> Manager enters the price</li>
+    <li><strong>"Add to Offer" button:</strong> Includes the product in the offer</li>
+    <li><strong>"Not Available" button:</strong> AI informs client it's unavailable</li>
+</ul>
+
+<h4>1.3.2 Room Conflict Resolution</h4>
+<p>When two clients both select the same room on the same date (both have "Option" status), the manager must decide who gets it.</p>
+<p><strong>What the manager sees:</strong></p>
+<ul>
+    <li>Conflict notification: "Client A and Client B both want Room X on Feb 7"</li>
+    <li><strong>Client 1 info:</strong> Name, email (first to reserve - preferred by default)</li>
+    <li><strong>Client 2 info:</strong> Name, email, reason for wanting this room (if provided)</li>
+    <li>Room and date in conflict</li>
+</ul>
+<p><strong>GUI components needed:</strong></p>
+<ul>
+    <li><strong>"Assign to Client 1" button:</strong> First holder gets the room (default preference)</li>
+    <li><strong>"Assign to Client 2" button:</strong> Client 2 gets the room if they have a better reason</li>
+    <li>The other client is automatically notified and offered alternatives (different room or date)</li>
+</ul>
+
+<h4>1.3.3 Message Review (Edge Cases)</h4>
+<p>When the AI isn't sure about a message (unusual request, unclear intent, potential spam):</p>
+<ul>
+    <li>Show the client's message</li>
+    <li>Manager decides how to respond (or marks as spam)</li>
+</ul>
+
+<hr>
+
+<h2>Section 2: Offer & Deposit Features</h2>
+
+<h3>2.1 Deposit Management (Manager Side)</h3>
+<p>The deposit is paid outside the system (bank transfer, etc.). The manager needs to track it.</p>
+<p><strong>Features needed:</strong></p>
+<ul>
+    <li><strong>Deposit status display:</strong> Show if deposit is "Pending" or "Paid" for each client</li>
+    <li><strong>"Mark Deposit Paid" button:</strong> Manager clicks this when they've received the deposit</li>
+</ul>
+<div class="note">
+    <strong>Note:</strong> The client does not interact with deposit features in the GUI - they receive deposit information in the offer email and pay externally.
+</div>
+
+<h3>2.2 Offer Confirmation</h3>
+<p>When all requirements are met and deposit is paid:</p>
+<ul>
+    <li><strong>Confirm Offer button:</strong> Finalize the event</li>
+    <li><strong>Reject button:</strong> Decline with optional reason</li>
+</ul>
+
+<hr>
+
+<h2>Section 3: Configuration / Admin</h2>
+
+<h3>3.1 Global Deposit Settings (MVP)</h3>
+<p>One global setting that applies to all offers:</p>
+<ul>
+    <li><strong>Toggle:</strong> Deposits on/off</li>
+    <li><strong>Type selector:</strong>
+        <ul>
+            <li>Fixed amount (e.g., CHF 500) - can be mentioned early in conversation</li>
+            <li>Percentage (e.g., 30% of total) - calculated when offer is created</li>
+        </ul>
+    </li>
+    <li><strong>Deadline:</strong> Days until payment due (7, 10, 14, or 30 days)</li>
+</ul>
+
+<h3>3.2 AI Settings (Post-MVP / Optional)</h3>
+<p><em>Not priority for MVP - implement if time allows</em></p>
+<ul>
+    <li>Choose AI quality level (affects cost and response quality)</li>
+    <li>View estimated cost per message</li>
+</ul>
+
+<h3>3.3 Prompt Editor (Post-MVP / Optional)</h3>
+<p><em>Not priority for MVP - implement if time allows</em></p>
+<ul>
+    <li>Edit the AI's instructions</li>
+    <li>View and revert to previous versions</li>
+</ul>
+
+<hr>
+
+<h2>Section 4: Open Decisions</h2>
+<p>These need team input before final design.</p>
+
+<h3>Open Decision 1: Email View Style</h3>
+<p><strong>Question:</strong> How should conversations be displayed?</p>
+<p><strong>Current default:</strong> Traditional email thread (Option B)</p>
+<table>
+    <tr>
+        <th>Option</th>
+        <th>Description</th>
+        <th>Advantages</th>
+        <th>Disadvantages</th>
+    </tr>
+    <tr>
+        <td>A</td>
+        <td>Chat-style (like WhatsApp)</td>
+        <td>Clearer organization, easier to follow, modern feel</td>
+        <td>Less familiar to email-heavy users</td>
+    </tr>
+    <tr>
+        <td>B</td>
+        <td>Traditional email thread</td>
+        <td>Familiar to managers, all clients in one inbox</td>
+        <td>Harder to track individual conversations</td>
+    </tr>
+    <tr>
+        <td>C</td>
+        <td>Hybrid - toggle between views</td>
+        <td>Best of both worlds</td>
+        <td>More complex to build</td>
+    </tr>
+</table>
+
+<h3>Open Decision 2: Client Information Overview</h3>
+<p><strong>Question:</strong> Should the manager see an overview panel for each client conversation?</p>
+<p>If yes, what should it show?</p>
+<ul>
+    <li>Client name and email</li>
+    <li>Which step of the process (e.g., "Discussing rooms")</li>
+    <li>What's confirmed: date, room, number of guests</li>
+    <li>What's still needed: date not confirmed, room not selected, etc.</li>
+    <li>Event type, special requirements</li>
+</ul>
+<table>
+    <tr>
+        <th>Option</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td>A</td>
+        <td>Yes - always visible sidebar</td>
+    </tr>
+    <tr>
+        <td>B</td>
+        <td>Yes - collapsible panel</td>
+    </tr>
+    <tr>
+        <td>C</td>
+        <td>No - just show conversation</td>
+    </tr>
+</table>
+
+<h3>Open Decision 3: When to Show Deposit Information</h3>
+<p><strong>Question:</strong> When should the client first see deposit requirements?</p>
+<table>
+    <tr>
+        <th>Option</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td>A</td>
+        <td>In the first AI reply (for fixed deposits that can be paid immediately)</td>
+    </tr>
+    <tr>
+        <td>B</td>
+        <td>Only in the formal offer (current behavior)</td>
+    </tr>
+    <tr>
+        <td>C</td>
+        <td>Early mention, then detailed in offer</td>
+    </tr>
+</table>
+<p><strong>Context:</strong></p>
+<ul>
+    <li>Fixed deposits (e.g., CHF 500) could theoretically be paid from the start</li>
+    <li>Percentage deposits (e.g., 30% of total) can only be calculated once the offer is ready</li>
+    <li>Currently, the AI only mentions deposit in the offer confirmation step</li>
+</ul>
+
+<h3>Open Decision 4: Progress Visualization</h3>
+<p><strong>Question:</strong> How to show where each client is in the process?</p>
+<table>
+    <tr>
+        <th>Option</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td>A</td>
+        <td>Simple text: "Step 3: Room Selection"</td>
+    </tr>
+    <tr>
+        <td>B</td>
+        <td>Visual progress bar</td>
+    </tr>
+    <tr>
+        <td>C</td>
+        <td>Checklist: ✓ Date confirmed, ✓ Room selected, ○ Offer pending</td>
+    </tr>
+    <tr>
+        <td>D</td>
+        <td>No progress indicator</td>
+    </tr>
+</table>
+
+<h3>Open Decision 5: Thread Closure</h3>
+<p><strong>Question:</strong> When is a conversation considered "closed"?</p>
+<table>
+    <tr>
+        <th>Option</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td>A</td>
+        <td>When offer is confirmed or cancelled</td>
+    </tr>
+    <tr>
+        <td>B</td>
+        <td>After X days of no activity</td>
+    </tr>
+    <tr>
+        <td>C</td>
+        <td>Manager manually closes it</td>
+    </tr>
+    <tr>
+        <td>D</td>
+        <td>Combination</td>
+    </tr>
+</table>
+
+<h3>Open Decision 6: Deposit Payment Verification</h3>
+<p><strong>Question:</strong> How does the manager mark that the deposit was paid?</p>
+<table>
+    <tr>
+        <th>Option</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td>A</td>
+        <td>Simple button "Mark as Paid" (recommended for MVP)</td>
+    </tr>
+    <tr>
+        <td>B</td>
+        <td>Button with confirmation dialog</td>
+    </tr>
+    <tr>
+        <td>C</td>
+        <td>Form with payment date and reference number</td>
+    </tr>
+</table>
+<p><strong>Recommendation:</strong> Option A for MVP, can add more details later if needed.</p>
+
+<h3>Open Decision 7: Quick Action Buttons</h3>
+<p><strong>Question:</strong> Should there be quick action buttons directly in the email view?</p>
+<p>Suggested buttons:</p>
+<ul>
+    <li>Approve & Send</li>
+    <li>Edit & Send</li>
+    <li>Reject</li>
+    <li>Hold (keep for later)</li>
+</ul>
+<p><strong>Decision needed:</strong> Which buttons are needed? All, some, or none?</p>
+
+<hr>
+
+<h2>Backend Note: Email Thread Assignment</h2>
+<div class="important">
+    <strong>Important context for frontend development:</strong>
+</div>
+<p>The backend currently assumes clients reply to existing emails (using email threading). The following is <strong>not yet implemented</strong> on the backend:</p>
+<ul>
+    <li><strong>Recognizing incoming emails:</strong> Matching a new email to the correct client/conversation thread</li>
+    <li><strong>Handling fresh emails:</strong> What if a client sends a new email instead of replying to an existing one? Can we still correctly assign it to their thread?</li>
+    <li><strong>100% accurate thread matching:</strong> Currently not guaranteed</li>
+</ul>
+<p><strong>What this means for frontend:</strong></p>
+<ul>
+    <li>For MVP, we may need to assume emails come in as replies (with proper email threading headers)</li>
+    <li>Manual thread assignment by manager may be needed as a fallback</li>
+    <li>This is a backend task to be completed before full email integration works</li>
+</ul>
+<p><strong>Current workaround:</strong> The development/testing version uses a chat interface where thread assignment is automatic (each session = one thread).</p>
+
+<hr>
+
+<h2>Features NOT in MVP</h2>
+<p>These are planned for later, not the initial release:</p>
+<ul>
+    <li><strong>Info Pages:</strong> Detailed room/catering browsing (managers know their rooms)</li>
+    <li><strong>Calendar View:</strong> Visual room availability calendar</li>
+    <li><strong>Per-Room Deposits:</strong> Individual room deposit settings</li>
+    <li><strong>Multiple Venues:</strong> Support for more than one venue</li>
+    <li><strong>Advanced Analytics:</strong> Statistics and reports</li>
+    <li><strong>Client-facing deposit payment:</strong> Clients pay outside the system for now</li>
+    <li><strong>Site visit scheduling UI:</strong> Backend feature, not GUI</li>
+</ul>
+
+<hr>
+
+<h2>Visual Design Suggestions</h2>
+<p>These are suggestions from development - adapt as needed:</p>
+
+<h3>Color Coding</h3>
+<ul>
+    <li><span style="color: green;">●</span> Green: Confirmed / Success / Sent</li>
+    <li><span style="color: orange;">●</span> Yellow/Orange: Pending / Waiting for action</li>
+    <li><span style="color: red;">●</span> Red: Error / Rejected / Unavailable</li>
+    <li><span style="color: blue;">●</span> Blue: Informational</li>
+</ul>
+
+<h3>Message States</h3>
+<ul>
+    <li>Client message: One style</li>
+    <li>AI draft (pending): Different style, clearly marked as "not sent yet"</li>
+    <li>Sent message: Another style showing it was delivered</li>
+</ul>
+
+<hr>
+
+<h2>Implementation Priority</h2>
+
+<div class="phase">
+    <div class="phase-title">Phase 1 - Core</div>
+    <ol>
+        <li>Email conversation view</li>
+        <li>AI draft approval (edit, approve, reject)</li>
+        <li>Special product request handling</li>
+        <li>Room conflict resolution</li>
+        <li>Message review for edge cases</li>
+    </ol>
+</div>
+
+<div class="phase">
+    <div class="phase-title">Phase 2 - Offers</div>
+    <ol>
+        <li>Deposit status display and "Mark as Paid" button</li>
+        <li>Global deposit settings (fixed/percentage, deadline)</li>
+        <li>Offer confirmation (confirm/reject)</li>
+    </ol>
+</div>
+
+<div class="phase">
+    <div class="phase-title">Phase 3 - Optional (if time allows)</div>
+    <ol>
+        <li>Client info overview (if decided yes)</li>
+        <li>Progress indicators (if decided yes)</li>
+        <li>AI settings</li>
+        <li>Prompt editor</li>
+    </ol>
+</div>
+
+<hr>
+<p style="text-align: center; color: #888; font-style: italic;">This document will be updated as decisions are made.</p>
+
+</body>
+</html>

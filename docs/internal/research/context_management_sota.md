@@ -1,4 +1,3 @@
-# SOTA Context Management Plan: OpenEvent-AI
 
 ## Overview
 This document outlines the State-of-the-Art (SOTA) strategy for managing LLM context within the OpenEvent-AI workflow. Based on industry research, the project will move away from raw conversation history in favor of a **"Context Packet"** architecture to improve accuracy, reduce hallucinations, and minimize token costs.
