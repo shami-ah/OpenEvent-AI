@@ -42,9 +42,11 @@ COARSE_ACTIVITIES = {
     # Offer & Pricing
     "offer_sent", "offer_accepted", "offer_rejected", "price_updated",
     # Deposit
-    "deposit_required", "deposit_paid", "deposit_updated", "billing_updated",
+    "deposit_required", "deposit_paid", "deposit_updated", "deposit_set", "billing_updated",
     # Verification Failures (important for manager!)
     "date_denied", "room_denied", "date_conflict", "room_conflict", "capacity_exceeded",
+    # HIL (Manager Approvals - managers need to verify their decisions!)
+    "hil_approved", "hil_rejected", "hil_modified", "product_sourced",
 }
 
 
@@ -168,10 +170,17 @@ WORKFLOW_ACTIVITIES = {
     "price_updated": ("💰", "Price Updated", "{old_price} → {new_price}"),
 
     # Deposit (payment)
+    "deposit_set": ("💳", "Deposit Configured", "{amount} due {due_date}"),
     "deposit_required": ("💳", "Deposit Required", "{amount}"),
     "deposit_paid": ("💰", "Deposit Paid", "{amount}"),
     "deposit_updated": ("💳", "Deposit Updated", "{old_amount} → {new_amount}"),
     "billing_updated": ("📋", "Billing Info Updated", ""),
+
+    # HIL (Manager Approvals) - COARSE so managers see their own decisions
+    "hil_approved": ("✓", "Manager Approved", "Step {step}: {task_type}"),
+    "hil_rejected": ("✗", "Manager Rejected", "Step {step}: {reason}"),
+    "hil_modified": ("✏️", "Manager Edited Response", "Step {step}"),
+    "product_sourced": ("📦", "Product Sourced", "{products}"),
 
     # Verification Failures (COARSE - manager needs to see these!)
     "date_denied": ("❌", "Date Denied", "{date} - {reason}"),
@@ -224,11 +233,8 @@ WORKFLOW_ACTIVITIES = {
     "contact_company": ("🏢", "Company", "{company}"),
     "contact_address": ("📍", "Address", "{address}"),
 
-    # Manager review workflow
-    "hil_waiting": ("👀", "Awaiting Manager Review", ""),
-    "hil_approved": ("✓", "Manager Approved", ""),
-    "hil_modified": ("✏️", "Manager Edited Response", "{changes}"),
-    "hil_rejected": ("✗", "Manager Rejected", "{reason}"),
+    # Manager review workflow (waiting is detailed, decisions are coarse - see above)
+    "hil_waiting": ("👀", "Awaiting Manager Review", "Step {step}"),
 
     # Communication
     "email_sent": ("📤", "Email Sent", "To: {recipient}"),

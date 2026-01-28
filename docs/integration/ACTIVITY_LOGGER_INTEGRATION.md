@@ -235,12 +235,16 @@ Activities are logged automatically for step transitions. Additional workflow ev
 | `event_created` | `workflows/io/database.py:389` | ✅ Hooked |
 | `client_saved` | `workflows/io/database.py:241` | ✅ Hooked |
 
+| `deposit_set` | `workflows/steps/step4_offer/trigger/step4_handler.py:741` | ✅ Hooked |
+| `hil_approved` | `workflows/runtime/hil_tasks.py` (3 locations) | ✅ Hooked |
+| `hil_rejected` | `workflows/runtime/hil_tasks.py` (2 locations) | ✅ Hooked |
+| `product_sourced` | `workflows/runtime/hil_tasks.py:299` | ✅ Hooked |
+
 ### Remaining (TODO)
 
 | Activity Key | Where to Hook | Priority |
 |--------------|---------------|----------|
-| `deposit_set` | `workflows/steps/step4_offer/` when deposit configured | Low |
-| `hil_*` | `workflows/runtime/hil_tasks.py` | Low |
+| `hil_modified` | When manager edits a response (currently tracked via `hil_approved` with "edited reply" type) | Low |
 
 ---
 
@@ -377,6 +381,8 @@ No `Z` suffix - display as-is or format with your preferred library.
 
 | Date | Change |
 |------|--------|
+| 2026-01-28 | HIL hooks: hil_approved, hil_rejected, product_sourced for manager audit trail |
+| 2026-01-28 | Deposit hook: deposit_set when deposit is first configured |
 | 2026-01-28 | Additional hooks: date_changed, room_changed, site_visit_booked, event_created, client_saved |
 | 2026-01-28 | Workflow hooks: date_confirmed, date_denied, room_denied, offer_sent, deposit_paid |
 | 2026-01-28 | Fixed: date_confirmed now "high" granularity (was incorrectly "detailed") |

@@ -737,6 +737,15 @@ def process(state: WorkflowState) -> GroupResult:
     deposit_info = build_deposit_info(total_amount, deposit_config, event_date=event_date_dt)
     if deposit_info:
         event_entry["deposit_info"] = deposit_info
+        # Log activity when deposit is first configured
+        from activity.persistence import log_workflow_activity
+        deposit_amount = deposit_info.get("deposit_amount", 0)
+        deposit_due = deposit_info.get("deposit_due_date", "before event")
+        log_workflow_activity(
+            event_entry, "deposit_set",
+            amount=f"CHF {deposit_amount:,.2f}",
+            due_date=deposit_due
+        )
 
     summary_lines = _compose_offer_summary(event_entry, total_amount, state)
     billing_display = format_billing_display(
