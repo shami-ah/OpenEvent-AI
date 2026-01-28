@@ -1,8 +1,11 @@
 # OpenEvent-AI: The Autonomous Venue Booking Engine
 
 OpenEvent-AI is a sophisticated, full-stack system designed to automate the end-to-end venue booking flow for "The Atelier". It combines the flexibility of Large Language Models (LLMs) with the reliability of deterministic state machines to handle inquiries, negotiate offers, and confirm bookings with "Human-In-The-Loop" (HIL) oversight.
-development: https://github.com/shami-ah/OpenEvent-AI/tree/main
-backend deployment: https://github.com/shami-ah/OpenEvent-AI/tree/integration/hostinger-backend
+
+**Branches:**
+- [Development Branch](https://github.com/shami-ah/OpenEvent-AI/tree/main) - Main development
+- [Backend Deployment](https://github.com/shami-ah/OpenEvent-AI/tree/integration/hostinger-backend) - Hostinger/VPS deployment
+
 ## 🚀 Overview
 
 The system ingests client inquiries (currently simulated via chat), maintains a deterministic event record, and coordinates every step of the booking process. Unlike simple chatbots, OpenEvent-AI is built on a **workflow engine** that tracks the lifecycle of an event from a "Lead" to a "Confirmed" booking.
@@ -33,6 +36,39 @@ A **Python FastAPI** application that acts as the brain. It exposes endpoints fo
 - **Orchestrator (`backend/workflow_email.py`)**: The central nervous system. It receives messages, loads state, executes the current step's logic, and persists the result.
 - **Groups (`backend/workflows/groups/`)**: Logic is divided into "Groups" corresponding to workflow steps (e.g., `intake`, `room_availability`, `offer`).
 - **NLU/Detectors (`backend/workflows/nlu/`)**: Specialized modules that analyze text to detect intents (e.g., `site_visit_detector`, `general_qna_classifier`).
+
+---
+
+## 🚀 Deployment (Hostinger / VPS)
+
+**For production deployment, see the `deploy/` folder first.** It contains everything needed to run OpenEvent-AI on a VPS like Hostinger:
+
+| File | Purpose |
+|------|---------|
+| `deploy/setup-vps.sh` | First-time server setup (Python, nginx, systemd) |
+| `deploy/update.sh` | Pull latest code and restart services |
+| `deploy/nginx-openevent.conf` | Nginx reverse proxy configuration |
+| `deploy/openevent.service` | systemd service for auto-restart |
+| `deploy/FRONTEND_API_INTEGRATION.md` | How the frontend connects to the backend API |
+
+**Quick Start (VPS):**
+```bash
+# 1. Clone repo on your VPS
+git clone https://github.com/shami-ah/OpenEvent-AI.git
+cd OpenEvent-AI
+
+# 2. Run the setup script (installs Python, nginx, systemd service)
+sudo ./deploy/setup-vps.sh
+
+# 3. Configure environment
+cp .env.example .env
+nano .env  # Add API keys
+
+# 4. Start the service
+sudo systemctl start openevent
+```
+
+**For Vercel (Frontend):** The frontend in `atelier-ai-frontend/` deploys directly to Vercel. Set `NEXT_PUBLIC_API_URL` to point to your backend URL.
 
 ---
 
@@ -98,6 +134,11 @@ The system avoids "always-on" LLM calls by using a tiered detection architecture
 
 ```text
 /
+├── deploy/                 # 🚀 VPS/Hostinger deployment configs (START HERE for prod)
+│   ├── nginx-openevent.conf  # Nginx reverse proxy config
+│   ├── openevent.service     # systemd service file
+│   ├── setup-vps.sh          # First-time server setup script
+│   └── update.sh             # Pull & restart script for updates
 ├── atelier-ai-frontend/    # Next.js Frontend application
 ├── backend/                # Python Backend application
 │   ├── adapters/           # Interface adapters (Calendar, GUI)
@@ -109,6 +150,7 @@ The system avoids "always-on" LLM calls by using a tiered detection architecture
 │       ├── nlu/            # Detectors & Classifiers (Regex + LLM)
 │       └── io/             # Database & Task Management
 ├── docs/                   # Detailed documentation & rules
+├── scripts/                # Dev & CI scripts
 └── tests/                  # Pytest suite
 ```
 
@@ -192,10 +234,13 @@ The system is transitioning from single-tenant to multi-tenant architecture. **P
 - **Data Isolation**: (In Progress) Future phases will enforce `team_id` filtering on all database queries.
 
 ### Recent Updates
+- **Time Slot Validation**: Warns when client requests times outside operating hours (08:00-23:00). Non-blocking warning displayed in offers.
+- **Activity Logger**: Comprehensive event activity tracking with granularity levels (verbose/normal/quiet). See `activity/persistence.py`.
 - **Supabase Integration**: Can be toggled via `OE_INTEGRATION_MODE=supabase`.
-- **Site Visit Logic**: Dedicated sub-flow for handling venue tours.
-- **Deposit Configuration**: Managers can now set global deposit rules.
+- **Site Visit Logic**: Dedicated sub-flow for handling venue tours (Step 7).
+- **Deposit Configuration**: Managers can now set global deposit rules via admin panel.
 - **HIL Toggle for AI Replies**: Optional review of all AI-generated responses before sending.
+- **Prompt Editor**: Non-technical managers can edit AI persona and step-specific instructions with version history.
 
 ### Configuration
 Key environment variables (create a `.env` file):
