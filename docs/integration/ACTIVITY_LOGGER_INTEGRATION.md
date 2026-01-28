@@ -229,16 +229,16 @@ Activities are logged automatically for step transitions. Additional workflow ev
 | `offer_rejected` | `step5_handler.py:1223` | ✅ Hooked |
 | `status_cancelled` | `events.py:414` + `step7_handler.py:604` | ✅ Hooked |
 | `deposit_paid` | `events.py:127` | ✅ Hooked |
+| `date_changed` | `workflows/runtime/pre_route.py:685` (detour detection) | ✅ Hooked |
+| `room_changed` | `workflows/runtime/pre_route.py:687` (detour detection) | ✅ Hooked |
+| `site_visit_booked` | `workflows/common/site_visit_state.py:272` | ✅ Hooked |
+| `event_created` | `workflows/io/database.py:389` | ✅ Hooked |
+| `client_saved` | `workflows/io/database.py:241` | ✅ Hooked |
 
 ### Remaining (TODO)
 
 | Activity Key | Where to Hook | Priority |
 |--------------|---------------|----------|
-| `date_changed` | `workflows/runtime/pre_route.py` when detour triggered | Medium |
-| `room_changed` | `workflows/runtime/pre_route.py` when room change detected | Medium |
-| `site_visit_booked` | `workflows/steps/step7_confirmation/` | Medium |
-| `client_saved` | `workflows/io/database.py::create_client()` | Low |
-| `event_created` | `workflows/io/database.py::create_event()` | Low |
 | `deposit_set` | `workflows/steps/step4_offer/` when deposit configured | Low |
 | `hil_*` | `workflows/runtime/hil_tasks.py` | Low |
 
@@ -377,6 +377,7 @@ No `Z` suffix - display as-is or format with your preferred library.
 
 | Date | Change |
 |------|--------|
+| 2026-01-28 | Additional hooks: date_changed, room_changed, site_visit_booked, event_created, client_saved |
 | 2026-01-28 | Workflow hooks: date_confirmed, date_denied, room_denied, offer_sent, deposit_paid |
 | 2026-01-28 | Fixed: date_confirmed now "high" granularity (was incorrectly "detailed") |
 | 2026-01-28 | Fixed: deposit_required template (removed missing due_date placeholder) |
