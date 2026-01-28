@@ -35,7 +35,22 @@
 
 **Test Results:** 27 unit tests passing. E2E verified with hybrid mode (Gemini + OpenAI).
 
-**Remaining:** ~8 more activity hooks (detours, HIL actions, site visit) - see TO_DO_NEXT_SESS.md
+### Activity Logger - Additional Hooks (Session 2)
+
+**More Hooks Added:**
+- `date_changed` → `pre_route.py:685` - When detour triggers date change
+- `room_changed` → `pre_route.py:687` - When detour triggers room change
+- `site_visit_booked` → `site_visit_state.py:272` - When site visit is scheduled
+- `event_created` → `database.py:389` - When new event entry is created
+- `client_saved` → `database.py:241` - When new client is saved to CRM
+- `deposit_set` → `step4_handler.py:741` - When deposit is first configured
+- `hil_approved` → `hil_tasks.py` (3 locations) - Manager approval with task type
+- `hil_rejected` → `hil_tasks.py` (2 locations) - Manager rejection with reason
+- `product_sourced` → `hil_tasks.py:299` - When manager sources a missing product
+
+**Design Note:** All HIL activities are now "high" granularity (visible to managers by default) so they can verify their own decisions in the activity log.
+
+**Remaining:** Only `hil_modified` (when manager edits response) - tracked via `hil_approved` with "edited reply" type
 
 ---
 

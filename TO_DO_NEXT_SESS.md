@@ -67,22 +67,21 @@ This file tracks active implementation goals and planned roadmap items. **Check 
 - ✅ Unit tests (27 passing)
 - ✅ E2E test with hybrid mode (Gemini + OpenAI)
 
-**Remaining Integration Points:**
+**All Workflow Hooks Implemented (2026-01-28):**
+- ✅ `client_saved` - database.py:241 (new clients)
+- ✅ `event_created` - database.py:389 (new events)
+- ✅ `date_changed` - pre_route.py:685 (detour detection)
+- ✅ `room_changed` - pre_route.py:687 (detour detection)
+- ✅ `deposit_set` - step4_handler.py:741 (when deposit first configured)
+- ✅ `site_visit_booked` - site_visit_state.py:272
+- ✅ `hil_approved` - hil_tasks.py (3 locations) - manager approvals with task type
+- ✅ `hil_rejected` - hil_tasks.py (2 locations) - manager rejections with reason
+- ✅ `product_sourced` - hil_tasks.py:299 - when manager sources missing product
+- ✅ `offer_accepted` - step5_handler.py:899 HIL approval
+- ✅ `offer_rejected` - step5_handler.py:1223 when client declines offer
+- ✅ `status_cancelled` - events.py:414 + step7_handler.py:604
 
-| Activity | Where to Hook | Priority |
-|----------|---------------|----------|
-| `client_saved` | `workflows/io/database.py::create_client()` | Low |
-| `event_created` | `workflows/io/database.py::create_event()` | Low |
-| `date_changed` | `workflows/runtime/pre_route.py` when detour triggered | Medium |
-| `room_changed` | `workflows/runtime/pre_route.py` when room change detected | Medium |
-| `deposit_set` | `workflows/steps/step4_offer/` when deposit configured | Low |
-| `site_visit_booked` | `workflows/steps/step7_confirmation/` | Medium |
-| `hil_*` | `workflows/runtime/hil_tasks.py` | Low |
-
-**Recently Added (2026-01-28):**
-- ✅ `offer_accepted` - step5_handler.py HIL approval
-- ✅ `offer_rejected` - step5_handler.py when client declines offer
-- ✅ `status_cancelled` - events.py cancel endpoint + step7_handler.py client decline
+**Remaining:** Only `hil_modified` (tracked via `hil_approved` with "edited reply" type)
 
 **Known Issue:**
 - `session_id` (thread_id) != `event_id` - activity endpoints use event_id, not session_id
