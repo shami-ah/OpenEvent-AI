@@ -1,5 +1,72 @@
 # Development Changelog
 
+## 2026-01-28
+
+### Feature: Activity Logger Workflow Integration
+
+**Goal:** Connect the Activity Logger module to actual workflow events so managers can trace what the AI did during each booking.
+
+**Hooks Added:**
+- `date_confirmed` → `confirmation_flow.py:522` - When client confirms a date
+- `date_denied` → `step2_handler.py:1031` - When requested date is unavailable
+- `room_denied` → `step3_handler.py:1029` - When locked room becomes unavailable
+- `offer_sent` → `step4_handler.py` - When offer is generated (with amount)
+- `offer_accepted` → `step5_handler.py:899` - When HIL approves offer
+- `offer_rejected` → `step5_handler.py:1223` - When client declines offer
+- `status_cancelled` → `events.py:414` + `step7_handler.py:604` - Manager or client cancellation
+- `deposit_paid` → `events.py:127` - When deposit payment is recorded
+- `status_*` → `database.py::update_event_metadata()` - Room status changes (Lead/Option/Confirmed)
+- `step_*_entered` → `database.py::update_event_metadata()` - Step transitions
+
+**Bug Fixes:**
+- Fixed `date_confirmed` granularity: was "detailed", now "high" (main milestone)
+- Fixed `deposit_required` template: removed missing `{due_date}` placeholder
+
+**DevEx Improvement:**
+- Updated `scripts/dev/oe_env.sh` to load both Gemini and OpenAI keys from Keychain
+- Added key status output: `[OpenAI:✓ Gemini:✓] - Hybrid mode ready`
+
+**Files Modified:**
+- `workflows/steps/step2_date_confirmation/trigger/confirmation_flow.py` - Added date_confirmed hook
+- `workflows/steps/step2_date_confirmation/trigger/step2_handler.py` - Added date_denied hook
+- `workflows/steps/step3_room_availability/trigger/step3_handler.py` - Added room_denied hook
+- `activity/persistence.py` - Fixed date_confirmed granularity, deposit_required template
+- `scripts/dev/oe_env.sh` - Added Gemini key loading for hybrid mode
+
+**Test Results:** 27 unit tests passing. E2E verified with hybrid mode (Gemini + OpenAI).
+
+### Activity Logger - Additional Hooks (Session 2)
+
+**More Hooks Added:**
+- `date_changed` → `pre_route.py:685` - When detour triggers date change
+- `room_changed` → `pre_route.py:687` - When detour triggers room change
+- `site_visit_booked` → `site_visit_state.py:272` - When site visit is scheduled
+- `event_created` → `database.py:389` - When new event entry is created
+- `client_saved` → `database.py:241` - When new client is saved to CRM
+- `deposit_set` → `step4_handler.py:741` - When deposit is first configured
+- `hil_approved` → `hil_tasks.py` (3 locations) - Manager approval with task type
+- `hil_rejected` → `hil_tasks.py` (2 locations) - Manager rejection with reason
+- `product_sourced` → `hil_tasks.py:299` - When manager sources a missing product
+
+**Design Note:** All HIL activities are now "high" granularity (visible to managers by default) so they can verify their own decisions in the activity log.
+
+**Remaining:** Only `hil_modified` (when manager edits response) - tracked via `hil_approved` with "edited reply" type
+
+---
+
+### Feature: Feature-Flagged Prompt Editor (Safe by Default)
+
+**Goal:** Keep prompt editing inactive unless explicitly enabled, to avoid disrupting active deployment work.
+
+**Solution:** Added a feature flag gate for the prompts editor UI and its backend endpoints. Default is OFF; editors must set `PROMPTS_EDITOR_ENABLED=true` (backend) and `NEXT_PUBLIC_PROMPTS_EDITOR_ENABLED=true` (frontend).
+
+**Files Modified:**
+- `api/routes/config.py` - Guard `/api/config/prompts*` endpoints behind feature flag
+- `atelier-ai-frontend/app/admin/prompts/page.tsx` - Hide prompts editor page unless enabled
+- `docs/plans/active/integration/PROMPT_CUSTOMIZATION_GUARDRAILS.md` - Documented guardrails + flags
+
+---
+
 ## 2026-01-27
 
 ### Feature: Global Field Capture System

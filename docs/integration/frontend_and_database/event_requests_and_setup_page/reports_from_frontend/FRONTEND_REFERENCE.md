@@ -1,8 +1,8 @@
-now# OpenEvent Frontend Reference
+# OpenEvent Frontend Reference
 
 **Purpose:** This document describes the frontend structure of the OpenEvent main application. Use this as context when building integrations.
 
-**Last Updated:** 2026-01-28
+**Last Updated:** 2025-12-08
 
 ---
 
@@ -30,7 +30,6 @@ OpenEvent is a **multi-tenant event management SaaS** built with:
 │  📥 Inbox         → /inbox      │
 │  👥 CRM           → /crm        │
 │  📄 Offers        → /offers     │
-│  🎫 Tickets       → /tickets    │
 │  👤 Staff         → /staff      │
 │  ✅ Tasks         → /tasks      │
 ├─────────────────────────────────┤
@@ -39,16 +38,13 @@ OpenEvent is a **multi-tenant event management SaaS** built with:
 │  🏢 Venue         → /setup/venue     │
 │  🚪 Rooms         → /setup/rooms     │
 │  📦 Products      → /setup/products  │
-│  📄 Offers Setup  → /setup/offers        │
-│  ✉️ Templates     → /setup/templates     │
-│  🎫 Ticketing     → /setup/ticketing     │
-│  💬 Event Requests→ /setup/event-requests│
+│  📄 Offers Setup  → /setup/offers    │
+│  ✉️ Templates     → /setup/templates │
 ├─────────────────────────────────┤
 │  OTHER                          │
 ├─────────────────────────────────┤
-│  📊 Dashboard     → /news       │
+│  📊 Dashboard     → /dashboard  │
 │  ⚙️ Settings      → /settings   │
-│  👤 Profile       → /profile    │
 │  💬 Feedback      → /feedback   │
 └─────────────────────────────────┘
 ```
@@ -69,12 +65,10 @@ OpenEvent is a **multi-tenant event management SaaS** built with:
 | Route | Page | Purpose |
 |-------|------|---------|
 | `/dashboard` | Dashboard | Overview with stats |
-| `/news` | Dashboard | Overview with stats (primary route) |
 | `/calendar` | Calendar | Event scheduling (multi-view) |
 | `/inbox` | Inbox2 | Email management |
 | `/crm` | CRM | Client management |
 | `/offers` | Offers | Quote/offer management |
-| `/tickets` | Tickets | Ticketing overview |
 | `/staff` | Staff | Staff scheduling |
 | `/tasks` | Tasks | Task management (Kanban) |
 | `/profile` | Profile | User profile |
@@ -89,8 +83,6 @@ OpenEvent is a **multi-tenant event management SaaS** built with:
 | `/setup/knowledge` | KnowledgeSetup | AI knowledge base |
 | `/setup/offers` | OffersSetup | Offer templates & deposit settings |
 | `/setup/templates` | EmailTemplatesPage | Email templates |
-| `/setup/ticketing` | TicketingTemplatesSetup | Ticket templates & settings |
-| `/setup/event-requests` | EventRequestsSetup | Event Request automation settings |
 
 ### Event Routes
 | Route | Page | Purpose |
@@ -158,27 +150,6 @@ OpenEvent is a **multi-tenant event management SaaS** built with:
 - client_id (optional link to client)
 - thread_id (for conversation grouping)
 
-### 3.2.1 Event Requests (Inbox tab)
-
-**Where:** Inside `Inbox2` as a standard folder named **Event Requests**.
-
-**Current behavior (Nico_UI_DONTPUBLISH):**
-- Uses **sample data only** for the Event Requests folder (no Supabase or backend integration yet).
-- Event Requests show a **right-side context panel** and **center-panel AI activity log** when the Event Requests folder is active.
-- Conversation display uses **EventRequestMessageCard** instead of the normal thread view.
-
-**Key files:**
-- `src/pages/Inbox2.tsx` (folder logic + sample data + conditional panels)
-- `src/components/inbox/EventRequestContextPanel.tsx` (status, progress, conflicts, special requests)
-- `src/components/inbox/EventRequestMessageCard.tsx` (thread message cards)
-- `src/components/inbox/CenterPanelAIActivityLog.tsx` (AI activity stream)
-- `src/types/event-request.ts` (Event Request data model + helpers)
-
-**Integration notes:**
-- Event Requests are not yet connected to the OpenEvent backend workflow or tasks.
-- Status changes and special-request actions are UI-only and do not persist.
-- Folder data should ultimately be hydrated from the backend (event_request_threads + workflow tasks).
-
 ---
 
 ## 3.3 CRM (`/crm`)
@@ -227,26 +198,6 @@ OpenEvent is a **multi-tenant event management SaaS** built with:
 - Filter by status (Draft, Sent, Confirmed)
 - Filter by payment status
 - Filter by date range
-
----
-
-## 3.5 Event Request Settings (`/setup/event-requests`)
-
-**Purpose:** Configure how AI handles incoming event inquiries.
-
-**Current behavior (Nico_UI_DONTPUBLISH):**
-- All settings are **local state only** (no persistence to Supabase/backend yet).
-- Auto-save is simulated (timestamp + toast), not stored.
-
-**Sections present:**
-- **Automation Mode**: Review all / Semi-auto / Full-auto
-- **Site Visits**: enable toggle + default timing + allowed days
-- **Minimum Event Size**: numeric filter
-- **Notifications**: date conflicts, special requests, new inquiries, confirmations, deposits
-- **Response Style**: tone slider + email signature
-
-**Key file:**
-- `src/pages/EventRequestsSetup.tsx`
 - Filter by amount range
 - Sort by multiple fields
 

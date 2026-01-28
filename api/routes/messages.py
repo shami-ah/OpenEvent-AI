@@ -46,6 +46,7 @@ from workflow_email import (
     save_db as wf_save_db,
     DB_PATH as WF_DB_PATH,
 )
+from activity.progress import get_progress_summary
 
 router = APIRouter(tags=["messages"])
 
@@ -855,15 +856,20 @@ async def send_message(request: SendMessageRequest):
 
     pending_actions = {"type": "workflow_actions", "actions": action_items} if action_items else None
 
-    # Include deposit_info from the event for frontend payment button
+    # Include deposit_info and progress from the event for frontend
     # IMPORTANT: Only send deposit_info at Step 4+ (after offer is generated with pricing)
     deposit_info = None
+    progress = None
     if conversation_state.event_id:
         try:
             db = wf_load_db()
             for event in db.get("events") or []:
                 if event.get("event_id") == conversation_state.event_id:
                     current_step = event.get("current_step", 1)
+
+                    # Progress bar data (always included)
+                    progress = get_progress_summary(event)
+
                     # Only include deposit info at Step 4+ (after room selection and offer generation)
                     if current_step >= 4:
                         raw_deposit = event.get("deposit_info")
@@ -889,6 +895,7 @@ async def send_message(request: SendMessageRequest):
         "event_info": conversation_state.event_info.dict(),
         "pending_actions": pending_actions,
         "deposit_info": deposit_info,
+        "progress": progress,  # Workflow progress bar state
     }
 
 

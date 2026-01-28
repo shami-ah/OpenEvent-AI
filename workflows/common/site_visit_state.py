@@ -268,6 +268,11 @@ def set_site_visit_date(
     state["confirmed_date"] = date_iso
     state["confirmed_time"] = time_slot
 
+    # Log site visit activity for manager visibility
+    from activity.persistence import log_workflow_activity
+    display_date = f"{date_iso} {time_slot}" if time_slot else date_iso
+    log_workflow_activity(event_entry, "site_visit_booked", date=display_date)
+
 
 def start_site_visit_flow(
     event_entry: Dict[str, Any],

@@ -894,6 +894,10 @@ def _apply_hil_negotiation_decision(state: WorkflowState, event_entry: Dict[str,
     event_entry["offer_accepted"] = True  # Critical: enables confirmation gate check
     event_entry.pop("negotiation_pending_decision", None)
     append_audit_entry(event_entry, 5, 6, "offer_accepted_hil")
+
+    # Log offer acceptance activity for manager visibility
+    from activity.persistence import log_workflow_activity
+    log_workflow_activity(event_entry, "offer_accepted")
     update_event_metadata(event_entry, current_step=6, thread_state="In Progress")
     state.current_step = 6
     state.set_thread_state("In Progress")
@@ -1218,6 +1222,10 @@ def _handle_decline(event_entry: Dict[str, Any]) -> Dict[str, Any]:
             offer["status"] = "Declined"
             offer["declined_at"] = timestamp
     event_entry["offer_status"] = "Declined"
+
+    # Log offer rejection activity for manager visibility
+    from activity.persistence import log_workflow_activity
+    log_workflow_activity(event_entry, "offer_rejected", reason="Client declined")
     return {
         "body": append_footer(
             "Thank you for letting me know. I've noted the cancellation. We'd be happy to help with future events anytime.",

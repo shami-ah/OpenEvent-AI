@@ -36,6 +36,33 @@ See [SETUP_API_KEYS.md](./SETUP_API_KEYS.md) for full guide.
 
 ---
 
+## API Gotchas
+
+### session_id vs event_id
+
+**Important:** The `session_id` returned by `/api/start-conversation` is NOT the same as `event_id`.
+
+| ID | Where Used | Example |
+|----|------------|---------|
+| `session_id` | `/api/send-message` requests | `6340d61e-f756-4e48-9378-aa5dc47ec6ac` |
+| `event_id` | `/api/events/*` endpoints, activity logging, database | `b41b735c-3d61-459b-b231-961a9be2889c` |
+
+**To find event_id from session_id:**
+1. Check server logs for `event_id=...` after conversation start
+2. Use `/api/events` list and match by client email or timestamp
+
+**Activity Logger endpoints use event_id:**
+```bash
+# Correct
+GET /api/events/{event_id}/activity
+GET /api/events/{event_id}/progress
+
+# Wrong (will return 404)
+GET /api/events/{session_id}/activity
+```
+
+---
+
 ## UX Design Principle: Verbalization vs Info Page
 
 **CRITICAL DESIGN RULE - Always remember when working on verbalization:**

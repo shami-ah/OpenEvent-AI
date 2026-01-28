@@ -121,6 +121,11 @@ async def pay_deposit(request: DepositPaymentRequest):
         deposit_info["deposit_paid_at"] = _now_iso()
         event_entry["deposit_info"] = deposit_info
 
+        # Log activity
+        from activity.persistence import log_workflow_activity
+        deposit_amount = deposit_info.get("deposit_amount", "")
+        log_workflow_activity(event_entry, "deposit_paid", amount=str(deposit_amount))
+
         wf_save_db(db)
         logger.info("Event %s: Deposit marked as paid", request.event_id)
 
@@ -404,6 +409,11 @@ async def cancel_event(event_id: str, request: CancelEventRequest):
 
         # Mark thread state for UI
         event_entry["thread_state"] = "Cancelled"
+
+        # Log cancellation activity for manager visibility
+        from activity.persistence import log_workflow_activity
+        reason_text = request.reason or cancellation_type
+        log_workflow_activity(event_entry, "status_cancelled", reason=reason_text)
 
         wf_save_db(db)
         logger.info(

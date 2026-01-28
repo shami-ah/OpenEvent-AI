@@ -108,6 +108,7 @@ echo "Apply the above Codex review criteria to your plan before implementing."
 - Adding new detection patterns or guards
 
 ## Tooling & Commands
+*   **Load Dev Environment:** `source scripts/dev/oe_env.sh` (loads API keys from Keychain + PYTHONPATH)
 *   **Start Backend (Hybrid):** `USER=$(whoami) ./scripts/dev/dev_server.sh`
 *   **Run Tests:** `pytest`
 *   **Live Logs:** `tail -f tmp-debug/live/{thread_id}.log`

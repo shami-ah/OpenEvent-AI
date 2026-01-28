@@ -737,6 +737,15 @@ def process(state: WorkflowState) -> GroupResult:
     deposit_info = build_deposit_info(total_amount, deposit_config, event_date=event_date_dt)
     if deposit_info:
         event_entry["deposit_info"] = deposit_info
+        # Log activity when deposit is first configured
+        from activity.persistence import log_workflow_activity
+        deposit_amount = deposit_info.get("deposit_amount", 0)
+        deposit_due = deposit_info.get("deposit_due_date", "before event")
+        log_workflow_activity(
+            event_entry, "deposit_set",
+            amount=f"CHF {deposit_amount:,.2f}",
+            due_date=deposit_due
+        )
 
     summary_lines = _compose_offer_summary(event_entry, total_amount, state)
     billing_display = format_billing_display(
@@ -777,7 +786,22 @@ def process(state: WorkflowState) -> GroupResult:
 
     # Combine all prefixes with verbalized intro and structured offer
     combined_prefix = room_confirmation_prefix + sourcing_prefix
-    offer_body_markdown = combined_prefix + verbalized_intro + "\n\n" + "\n".join(summary_lines)
+
+    # [TIME WARNING] Include operating hours warning if times are outside venue hours
+    time_warning = state.extras.get("time_warning")
+    time_warning_suffix = ""
+    if time_warning:
+        # Log activity for visibility
+        from activity.persistence import log_workflow_activity
+        log_workflow_activity(
+            event_entry, "time_outside_hours",
+            time=f"{state.user_info.get('start_time', '')} - {state.user_info.get('end_time', '')}",
+            issue=state.extras.get("time_warning_issue", "outside_hours"),
+        )
+        time_warning_suffix = f"\n\n---\n**Note:** {time_warning}"
+        logger.info("[Step4][TIME_WARNING] Including operating hours warning in offer")
+
+    offer_body_markdown = combined_prefix + verbalized_intro + "\n\n" + "\n".join(summary_lines) + time_warning_suffix
 
     draft_message = {
         "body_markdown": offer_body_markdown,
@@ -870,6 +894,12 @@ def process(state: WorkflowState) -> GroupResult:
         "context": state.context_snapshot,
         "persisted": True,
     }
+
+    # Log offer sent activity
+    from activity.persistence import log_workflow_activity
+    amount_str = f"€{total_amount}" if total_amount else ""
+    log_workflow_activity(event_entry, "offer_sent", amount=amount_str)
+
     result = GroupResult(action="offer_draft_prepared", payload=payload, halt=True)
     if deferred_general_qna:
         _append_deferred_general_qna(state, event_entry, classification, thread_id)

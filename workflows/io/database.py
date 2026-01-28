@@ -238,11 +238,12 @@ def save_db(db: Dict[str, Any], path: Path, lock_path: Optional[Path] = None, *,
             _do_save()
 
 
-def upsert_client(db: Dict[str, Any], email: str, name: Optional[str] = None) -> Dict[str, Any]:
+def upsert_client(db: Dict[str, Any], email: str, name: Optional[str] = None, event_entry: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """[OpenEvent Database] Create or return a client profile keyed by email."""
 
     client_id = (email or "").lower()
     clients = db.setdefault("clients", {})
+    is_new_client = client_id not in clients
     client = clients.setdefault(
         client_id,
         {
@@ -253,6 +254,13 @@ def upsert_client(db: Dict[str, Any], email: str, name: Optional[str] = None) ->
     )
     if name:
         client["profile"]["name"] = client["profile"]["name"] or name
+
+    # Log client creation activity for manager visibility (only for new clients)
+    if is_new_client and event_entry:
+        from activity.persistence import log_workflow_activity
+        client_name = name or email
+        log_workflow_activity(event_entry, "client_saved", client_name=client_name)
+
     return client
 
 
@@ -384,6 +392,11 @@ def create_event_entry(db: Dict[str, Any], event_data: Dict[str, Any]) -> str:
         "deferred_intents": [],
     }
     db.setdefault("events", []).append(entry)
+
+    # Log event creation activity for manager visibility
+    from activity.persistence import log_workflow_activity
+    log_workflow_activity(entry, "event_created", status=EventStatus.LEAD.value)
+
     try:
         calendar_event = create_calendar_event(entry, "lead")
         entry["calendar_event_id"] = calendar_event.get("id")
@@ -542,9 +555,16 @@ def update_event_metadata(event: Dict[str, Any], **fields: Any) -> None:
 
     When 'status' is set to a booking status (Lead/Option/Confirmed),
     also syncs to event_data["Status"] for backward compatibility.
+
+    Also logs manager-visible activities for key workflow transitions.
     """
+    from activity.persistence import log_workflow_activity
 
     ensure_event_defaults(event)
+
+    # Track step changes for activity logging
+    old_step = event.get("current_step")
+
     for key, value in fields.items():
         event[key] = value
 
@@ -554,6 +574,19 @@ def update_event_metadata(event: Dict[str, Any], **fields: Any) -> None:
         booking_status = fields["status"]
         if booking_status in ("Lead", "Option", "Confirmed"):
             event.setdefault("event_data", {})["Status"] = booking_status
+            # Log room status change (coarse - always visible)
+            status_key = f"status_{booking_status.lower()}"
+            log_workflow_activity(event, status_key)
+        elif booking_status == "Cancelled":
+            reason = fields.get("cancellation_reason", "")
+            log_workflow_activity(event, "status_cancelled", reason=reason)
+
+    # Log activity for step transitions (manager-visible)
+    if "current_step" in fields:
+        new_step = fields["current_step"]
+        if new_step != old_step and new_step in (1, 2, 3, 4, 5, 6, 7):
+            activity_key = f"step_{new_step}_entered"
+            log_workflow_activity(event, activity_key)
 
 
 def tag_message(event_entry: Dict[str, Any], msg_id: Optional[str]) -> None:

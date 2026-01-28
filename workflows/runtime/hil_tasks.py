@@ -209,6 +209,11 @@ def approve_task_and_send(
             )
             set_hil_open(thread_id, False)
 
+            # Log activity for manager audit trail
+            from activity.persistence import log_workflow_activity
+            task_type = "edited reply" if edited_message else "AI reply"
+            log_workflow_activity(target_event, "hil_approved", step=step_id or "?", task_type=task_type)
+
         db_io.save_db(db, path, lock_path=lock_path)
 
         draft = {
@@ -290,6 +295,11 @@ def approve_task_and_send(
                 }
             )
 
+            # Log activity for manager audit trail
+            from activity.persistence import log_workflow_activity
+            products_text = ", ".join(products) if products else "product"
+            log_workflow_activity(target_event, "product_sourced", products=products_text)
+
             # Update state for direct advance to Step 4
             # IMPORTANT: Clear caller_step to ensure Step 4 is called (not some other step)
             update_event_metadata(
@@ -343,6 +353,11 @@ def approve_task_and_send(
         }
     )
     set_hil_open(thread_id, bool(target_event.get("pending_hil_requests") or []))
+
+    # Log activity for manager audit trail
+    from activity.persistence import log_workflow_activity
+    request_step = target_request.get("step") or "?"
+    log_workflow_activity(target_event, "hil_approved", step=request_step, task_type="workflow task")
 
     step_num = target_request.get("step")
     if isinstance(step_num, int):
@@ -639,6 +654,11 @@ def reject_task_and_send(
             )
             set_hil_open(thread_id, False)
 
+            # Log activity for manager audit trail
+            from activity.persistence import log_workflow_activity
+            reason = manager_notes or "no reason given"
+            log_workflow_activity(target_event, "hil_rejected", step=step_id or "?", reason=reason)
+
         db_io.save_db(db, path, lock_path=lock_path)
 
         # Rejected AI reply = no message sent to client
@@ -696,6 +716,14 @@ def reject_task_and_send(
                     "products": products,
                 }
             )
+
+            # Log activity for manager audit trail
+            from activity.persistence import log_workflow_activity
+            products_text = ", ".join(products) if products else "product"
+            reason = f"Could not source: {products_text}"
+            if manager_notes:
+                reason += f" ({manager_notes})"
+            log_workflow_activity(target_event, "hil_rejected", step=3, reason=reason)
 
             # Update thread state - waiting for client to decide
             update_event_metadata(target_event, thread_state="Awaiting Client")

@@ -295,6 +295,20 @@ def handle_partial_confirmation(
             state.user_info["date"] = window.iso_date
             state.user_info["start_time"] = window.start_time
             state.user_info["end_time"] = window.end_time
+            # [TIME VALIDATION] Validate default times against operating hours
+            from workflows.common.time_validation import validate_event_times
+            time_validation = validate_event_times(window.start_time, window.end_time)
+            if not time_validation.is_valid:
+                logger.info(
+                    "[Step2][TIME_VALIDATION] Default times outside hours: %s",
+                    time_validation.issue
+                )
+                state.extras["time_warning"] = time_validation.friendly_message
+                state.extras["time_warning_issue"] = time_validation.issue
+                # Persist to event_entry for traceability
+                event_entry.setdefault("time_validation", {})
+                event_entry["time_validation"]["issue"] = time_validation.issue
+                event_entry["time_validation"]["warning"] = time_validation.friendly_message
             # Continue with full confirmation flow - return None to let caller proceed
             return None  # Signal to caller to use non-partial path
 
@@ -489,6 +503,17 @@ def finalize_confirmation(
     state.user_info["start_time"] = window.start_time
     state.user_info["end_time"] = window.end_time
 
+    # [TIME VALIDATION] Validate finalized times against operating hours
+    from workflows.common.time_validation import validate_event_times
+    time_validation = validate_event_times(window.start_time, window.end_time)
+    if not time_validation.is_valid:
+        logger.info(
+            "[Step2][TIME_VALIDATION] Finalized times outside hours: %s",
+            time_validation.issue
+        )
+        state.extras["time_warning"] = time_validation.friendly_message
+        state.extras["time_warning_issue"] = time_validation.issue
+
     previous_window = event_entry.get("requested_window") or {}
     new_hash = _window_hash(window.iso_date, window.start_iso, window.end_iso)
     reuse_previous = previous_window.get("hash") == new_hash
@@ -518,6 +543,10 @@ def finalize_confirmation(
         requirements_hash=new_req_hash,
         thread_state="In Progress",
     )
+    # Log date confirmation activity for manager visibility
+    from activity.persistence import log_workflow_activity
+    log_workflow_activity(event_entry, "date_confirmed", date=window.display_date)
+
     if event_entry.get("calendar_event_id"):
         try:
             update_calendar_event_status(event_entry.get("event_id", ""), event_entry.get("status", ""), "lead")

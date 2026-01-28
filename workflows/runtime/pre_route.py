@@ -681,6 +681,13 @@ def evaluate_pre_route_guards(state: WorkflowState) -> None:
             state.event_entry["caller_step"] = current
             logger.debug("[WF][GUARDS] Setting caller_step=%s for detour return", current)
 
+            # Log detour activity for manager visibility
+            from activity.persistence import log_workflow_activity
+            if guard_snapshot.forced_step == 2:
+                log_workflow_activity(state.event_entry, "date_changed", old_date="", new_date="pending")
+            elif guard_snapshot.forced_step == 3:
+                log_workflow_activity(state.event_entry, "room_changed", old_room="", new_room="pending")
+
         state.extras["persist"] = True
 
     # Store candidate dates for step 2

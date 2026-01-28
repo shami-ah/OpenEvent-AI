@@ -600,6 +600,10 @@ def _handle_decline(state: WorkflowState, event_entry: Dict[str, Any]) -> GroupR
     """Handle booking decline/cancellation."""
     event_entry.setdefault("event_data", {})["Status"] = EventStatus.CANCELLED.value
 
+    # Log cancellation activity for manager visibility
+    from activity.persistence import log_workflow_activity
+    log_workflow_activity(event_entry, "status_cancelled", reason="Client declined")
+
     # Clean up event-specific snapshots (room listings, offers) on cancellation
     event_id = event_entry.get("event_id")
     if event_id:

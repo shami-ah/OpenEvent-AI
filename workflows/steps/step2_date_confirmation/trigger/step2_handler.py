@@ -1027,6 +1027,10 @@ def _present_candidate_dates(
     if unavailable_requested:
         # D-PRES: Use extracted function for unavailable message
         message_lines.extend(build_unavailable_message(unavailable_requested))
+        # Log date denied activity for manager visibility
+        from activity.persistence import log_workflow_activity
+        for denied_date in unavailable_requested:
+            log_workflow_activity(event_entry, "date_denied", date=denied_date)
     if weekday_shortfall and formatted_dates:
         message_lines.append(
             "I couldn't find a free Thursday or Friday in that range. These are the closest available slots right now."

@@ -35,6 +35,7 @@ DEPENDS ON:
 """
 
 import logging
+import os
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -187,6 +188,16 @@ class PromptHistoryResponse(BaseModel):
 def _now_iso() -> str:
     """Return current UTC time in ISO format."""
     return datetime.utcnow().isoformat() + "Z"
+
+def _prompts_editor_enabled() -> bool:
+    """Return True if prompt editing endpoints should be enabled."""
+    return os.getenv("PROMPTS_EDITOR_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _assert_prompts_editor_enabled() -> None:
+    """Disable prompt editing endpoints unless explicitly enabled."""
+    if not _prompts_editor_enabled():
+        raise HTTPException(status_code=404, detail="Endpoint not available")
 
 
 # --- Route Handlers ---
@@ -897,6 +908,7 @@ async def get_prompts_config():
     Get current prompt configuration.
     Merges DB overrides with code defaults.
     """
+    _assert_prompts_editor_enabled()
     try:
         db = wf_load_db()
         stored = db.get("config", {}).get("prompts", {})
@@ -933,6 +945,7 @@ async def set_prompts_config(config: PromptConfig):
     Save new prompt configuration.
     Archives the previous version to history.
     """
+    _assert_prompts_editor_enabled()
     try:
         db = wf_load_db()
         if "config" not in db:
@@ -965,6 +978,7 @@ async def set_prompts_config(config: PromptConfig):
 @router.get("/prompts/history", response_model=PromptHistoryResponse)
 async def get_prompts_history():
     """Get the history of prompt changes."""
+    _assert_prompts_editor_enabled()
     try:
         db = wf_load_db()
         history = db.get("config", {}).get("prompts_history", [])
@@ -979,6 +993,7 @@ async def revert_prompts_config(index: int):
     Revert prompt configuration to a historical version.
     The current state is pushed to history before reverting.
     """
+    _assert_prompts_editor_enabled()
     try:
         db = wf_load_db()
         history = db.get("config", {}).get("prompts_history", [])
@@ -1039,56 +1054,55 @@ async def revert_prompts_config(index: int):
 # }
 # ---------------------------------------------------------------------------
 
-# @router.get("/room-deposit/{room_id}")
-# async def get_room_deposit_config(room_id: str):
-#     """
-#     Get deposit configuration for a specific room.
-#
-#     INACTIVE - Uncomment when integrating with main frontend.
-#     """
-#     try:
-#         db = wf_load_db()
-#         room_deposits = db.get("config", {}).get("room_deposits", {})
-#         config = room_deposits.get(room_id, {})
-#         return {
-#             "room_id": room_id,
-#             "deposit_required": config.get("deposit_required", False),
-#             "deposit_percent": config.get("deposit_percent", None),
-#             "updated_at": config.get("updated_at"),
-#         }
-#     except Exception as exc:
-#         raise HTTPException(
-#             status_code=500, detail=f"Failed to load room deposit config: {exc}"
-#         ) from exc
-#
-#
-# @router.post("/room-deposit/{room_id}")
-# async def set_room_deposit_config(room_id: str, deposit_required: bool, deposit_percent: Optional[int] = None):
-#     """
-#     Set deposit configuration for a specific room.
-#
-#     INACTIVE - Uncomment when integrating with main frontend.
-#
-#     This overrides the global deposit setting for offers using this room.
-#     """
-#     try:
-#         db = wf_load_db()
-#         if "config" not in db:
-#             db["config"] = {}
-#         if "room_deposits" not in db["config"]:
-#             db["config"]["room_deposits"] = {}
-#         db["config"]["room_deposits"][room_id] = {
-#             "deposit_required": deposit_required,
-#             "deposit_percent": deposit_percent,
-#             "updated_at": _now_iso(),
-#         }
-#         wf_save_db(db)
-#         logger.info("Room deposit updated: room={room_id} required={deposit_required} percent={deposit_percent}")
-#         return {"status": "ok", "room_id": room_id, "config": db["config"]["room_deposits"][room_id]}
-#     except Exception as exc:
-#         raise HTTPException(
-#             status_code=500, detail=f"Failed to save room deposit config: {exc}"
-#         ) from exc
+@router.get("/room-deposit/{room_id}")
+async def get_room_deposit_config(room_id: str):
+    """
+    Get deposit configuration for a specific room.
+
+    Returns room-specific deposit overrides. If no override exists,
+    the global deposit config applies.
+    """
+    try:
+        db = wf_load_db()
+        room_deposits = db.get("config", {}).get("room_deposits", {})
+        config = room_deposits.get(room_id, {})
+        return {
+            "room_id": room_id,
+            "deposit_required": config.get("deposit_required", False),
+            "deposit_percent": config.get("deposit_percent", None),
+            "updated_at": config.get("updated_at"),
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load room deposit config: {exc}"
+        ) from exc
+
+
+@router.post("/room-deposit/{room_id}")
+async def set_room_deposit_config(room_id: str, deposit_required: bool, deposit_percent: Optional[int] = None):
+    """
+    Set deposit configuration for a specific room.
+
+    This overrides the global deposit setting for offers using this room.
+    """
+    try:
+        db = wf_load_db()
+        if "config" not in db:
+            db["config"] = {}
+        if "room_deposits" not in db["config"]:
+            db["config"]["room_deposits"] = {}
+        db["config"]["room_deposits"][room_id] = {
+            "deposit_required": deposit_required,
+            "deposit_percent": deposit_percent,
+            "updated_at": _now_iso(),
+        }
+        wf_save_db(db)
+        logger.info("Room deposit updated: room=%s required=%s percent=%s", room_id, deposit_required, deposit_percent)
+        return {"status": "ok", "room_id": room_id, "config": db["config"]["room_deposits"][room_id]}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save room deposit config: {exc}"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
