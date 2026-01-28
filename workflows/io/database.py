@@ -238,11 +238,12 @@ def save_db(db: Dict[str, Any], path: Path, lock_path: Optional[Path] = None, *,
             _do_save()
 
 
-def upsert_client(db: Dict[str, Any], email: str, name: Optional[str] = None) -> Dict[str, Any]:
+def upsert_client(db: Dict[str, Any], email: str, name: Optional[str] = None, event_entry: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """[OpenEvent Database] Create or return a client profile keyed by email."""
 
     client_id = (email or "").lower()
     clients = db.setdefault("clients", {})
+    is_new_client = client_id not in clients
     client = clients.setdefault(
         client_id,
         {
@@ -253,6 +254,13 @@ def upsert_client(db: Dict[str, Any], email: str, name: Optional[str] = None) ->
     )
     if name:
         client["profile"]["name"] = client["profile"]["name"] or name
+
+    # Log client creation activity for manager visibility (only for new clients)
+    if is_new_client and event_entry:
+        from activity.persistence import log_workflow_activity
+        client_name = name or email
+        log_workflow_activity(event_entry, "client_saved", client_name=client_name)
+
     return client
 
 
@@ -384,6 +392,11 @@ def create_event_entry(db: Dict[str, Any], event_data: Dict[str, Any]) -> str:
         "deferred_intents": [],
     }
     db.setdefault("events", []).append(entry)
+
+    # Log event creation activity for manager visibility
+    from activity.persistence import log_workflow_activity
+    log_workflow_activity(entry, "event_created", status=EventStatus.LEAD.value)
+
     try:
         calendar_event = create_calendar_event(entry, "lead")
         entry["calendar_event_id"] = calendar_event.get("id")
