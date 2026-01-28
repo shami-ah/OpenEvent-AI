@@ -11,6 +11,9 @@
 - `date_denied` → `step2_handler.py:1031` - When requested date is unavailable
 - `room_denied` → `step3_handler.py:1029` - When locked room becomes unavailable
 - `offer_sent` → `step4_handler.py` - When offer is generated (with amount)
+- `offer_accepted` → `step5_handler.py:899` - When HIL approves offer
+- `offer_rejected` → `step5_handler.py:1223` - When client declines offer
+- `status_cancelled` → `events.py:414` + `step7_handler.py:604` - Manager or client cancellation
 - `deposit_paid` → `events.py:127` - When deposit payment is recorded
 - `status_*` → `database.py::update_event_metadata()` - Room status changes (Lead/Option/Confirmed)
 - `step_*_entered` → `database.py::update_event_metadata()` - Step transitions

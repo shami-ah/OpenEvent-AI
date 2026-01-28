@@ -225,6 +225,9 @@ Activities are logged automatically for step transitions. Additional workflow ev
 | `date_denied` | `step2_handler.py:1031` | ✅ Hooked |
 | `room_denied` | `step3_handler.py:1029` | ✅ Hooked |
 | `offer_sent` | `step4_handler.py` | ✅ Hooked |
+| `offer_accepted` | `step5_handler.py:899` | ✅ Hooked |
+| `offer_rejected` | `step5_handler.py:1223` | ✅ Hooked |
+| `status_cancelled` | `events.py:414` + `step7_handler.py:604` | ✅ Hooked |
 | `deposit_paid` | `events.py:127` | ✅ Hooked |
 
 ### Remaining (TODO)
@@ -233,7 +236,6 @@ Activities are logged automatically for step transitions. Additional workflow ev
 |--------------|---------------|----------|
 | `date_changed` | `workflows/runtime/pre_route.py` when detour triggered | Medium |
 | `room_changed` | `workflows/runtime/pre_route.py` when room change detected | Medium |
-| `offer_accepted` | `workflows/steps/step4_offer/` or HIL approval | Medium |
 | `site_visit_booked` | `workflows/steps/step7_confirmation/` | Medium |
 | `client_saved` | `workflows/io/database.py::create_client()` | Low |
 | `event_created` | `workflows/io/database.py::create_event()` | Low |

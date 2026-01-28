@@ -410,6 +410,11 @@ async def cancel_event(event_id: str, request: CancelEventRequest):
         # Mark thread state for UI
         event_entry["thread_state"] = "Cancelled"
 
+        # Log cancellation activity for manager visibility
+        from activity.persistence import log_workflow_activity
+        reason_text = request.reason or cancellation_type
+        log_workflow_activity(event_entry, "status_cancelled", reason=reason_text)
+
         wf_save_db(db)
         logger.info(
             "Event %s cancelled: type=%s, previous_step=%d, reason=%s",

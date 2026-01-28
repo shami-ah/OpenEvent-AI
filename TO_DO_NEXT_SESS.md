@@ -75,10 +75,14 @@ This file tracks active implementation goals and planned roadmap items. **Check 
 | `event_created` | `workflows/io/database.py::create_event()` | Low |
 | `date_changed` | `workflows/runtime/pre_route.py` when detour triggered | Medium |
 | `room_changed` | `workflows/runtime/pre_route.py` when room change detected | Medium |
-| `offer_accepted` | `workflows/steps/step4_offer/` or HIL approval | Medium |
 | `deposit_set` | `workflows/steps/step4_offer/` when deposit configured | Low |
 | `site_visit_booked` | `workflows/steps/step7_confirmation/` | Medium |
 | `hil_*` | `workflows/runtime/hil_tasks.py` | Low |
+
+**Recently Added (2026-01-28):**
+- ✅ `offer_accepted` - step5_handler.py HIL approval
+- ✅ `offer_rejected` - step5_handler.py when client declines offer
+- ✅ `status_cancelled` - events.py cancel endpoint + step7_handler.py client decline
 
 **Known Issue:**
 - `session_id` (thread_id) != `event_id` - activity endpoints use event_id, not session_id
